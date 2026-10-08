@@ -478,6 +478,7 @@ function render() {
   const c = cfg();
   if (!c.url || !c.key) return telaConfig();
   if (!S.user) return telaLogin();
+  if (S.trocaObrigatoria) return telaSenha(true);
   const emps = {};
   S.docs.forEach(d => emps[d.cnpj] = d.nome_empresa);
   const views = [["painel","Painel de créditos"],["credito","Extrato do crédito"],["importar","Importar PER/DCOMP"],
@@ -495,6 +496,8 @@ function render() {
         </select>
       </label>
       <span class="usuario">${esc(S.user.email)}</span>
+      <a class="link" href="guia.html" target="_blank" rel="noopener" style="font-weight:600;color:var(--azul)">Guia de uso</a>
+      <a class="link" href="#senha" style="font-weight:600;color:var(--azul)">Trocar senha</a>
       <button class="link" id="btnSair">Sair</button>
     </header>
     <nav>${views.map(([k, t]) => `<a href="#${k}" class="${S.view === k ? "ativo" : ""}">${t}</a>`).join("")}</nav>
@@ -503,7 +506,49 @@ function render() {
   $("#btnSair").onclick = async () => { await sb.auth.signOut(); S.user = null; render(); };
   const main = $("#conteudo");
   if (S.aviso) main.insertAdjacentHTML("beforeend", `<div class="msg aviso">${esc(S.aviso)}</div>`);
+  if (S.view === "senha") return telaSenha(false);
   ({painel: telaPainel, credito: telaCredito, importar: telaImportar, documentos: telaDocumentos, selic: telaSelic}[S.view] || telaPainel)(main);
+}
+
+// ---------------- Troca de senha ----------------
+function telaSenha(obrigatoria) {
+  const html = `
+    <form class="login" id="frmSenha" style="${obrigatoria ? "" : "margin-top:10px"}">
+      ${obrigatoria ? `<img src="${LOGO}" alt="Irko">` : ""}
+      <h1>${obrigatoria ? "Defina sua senha" : "Trocar senha"}</h1>
+      ${obrigatoria ? `<p class="sub">Primeiro acesso de ${esc(S.user.email)}: troque a senha inicial recebida por uma senha pessoal.</p>` : ""}
+      <div id="senhaMsg"></div>
+      <label>Senha atual<input type="password" id="sAtual" autocomplete="current-password" required></label>
+      <label>Nova senha<input type="password" id="sNova" autocomplete="new-password" required></label>
+      <label>Confirme a nova senha<input type="password" id="sConf" autocomplete="new-password" required></label>
+      <p class="nota">Mínimo de 8 caracteres, com letras e números. Não reutilize senhas de outros sistemas.</p>
+      <button class="prim" type="submit">Salvar nova senha</button>
+      ${obrigatoria ? `<button type="button" class="link" id="sSair">Sair</button>`
+                    : `<button type="button" class="link" id="sVoltar">Voltar</button>`}
+    </form>`;
+  if (obrigatoria) $("#app").innerHTML = html;
+  else $("#conteudo").insertAdjacentHTML("beforeend", html);
+  const erro = m => { $("#senhaMsg").innerHTML = `<div class="msg erro">${esc(m)}</div>`; };
+  if (obrigatoria) $("#sSair").onclick = async () => { await sb.auth.signOut(); S.user = null; S.trocaObrigatoria = false; render(); };
+  else $("#sVoltar").onclick = () => history.back();
+  $("#frmSenha").onsubmit = async e => {
+    e.preventDefault();
+    const atual = $("#sAtual").value, nova = $("#sNova").value, conf = $("#sConf").value;
+    if (nova.length < 8 || !/[A-Za-z]/.test(nova) || !/\d/.test(nova)) return erro("A nova senha precisa ter pelo menos 8 caracteres, com letras e números.");
+    if (nova !== conf) return erro("A confirmação não confere com a nova senha.");
+    if (nova === atual) return erro("A nova senha precisa ser diferente da atual.");
+    carregando(true);
+    try {
+      // confirma a senha atual antes de trocar
+      const r1 = await sb.auth.signInWithPassword({email: S.user.email, password: atual});
+      if (r1.error) return erro("Senha atual incorreta.");
+      const {data, error} = await sb.auth.updateUser({password: nova, data: {senha_definida: true}});
+      if (error) return erro(/different from the old/i.test(error.message) ? "A nova senha precisa ser diferente da atual." : error.message);
+      toast("Senha alterada.");
+      if (obrigatoria) { S.trocaObrigatoria = false; location.hash = "painel"; await entrar(data.user); }
+      else { S.user = data.user; location.hash = "painel"; }
+    } finally { carregando(false); }
+  };
 }
 
 function telaConfig() {
@@ -533,7 +578,8 @@ function telaLogin(erro) {
       <label>E-mail<input type="email" id="lgEmail" autocomplete="username" required></label>
       <label>Senha<input type="password" id="lgSenha" autocomplete="current-password" required></label>
       <button class="prim" type="submit">Entrar</button>
-      <p class="nota">Acesso restrito a usuários Irko cadastrados pelo administrador.</p>
+      <p class="nota">Acesso restrito a usuários Irko cadastrados pelo administrador.
+        <a href="guia.html" target="_blank" rel="noopener">Veja o guia de uso</a>.</p>
       ${SUPABASE_URL ? "" : `<button type="button" class="link" id="lgCfg">Alterar configuração do Supabase</button>`}
     </form>`;
   $("#frmLogin").onsubmit = async e => {
@@ -988,6 +1034,9 @@ async function entrar(user) {
     return telaLogin("Acesso restrito a e-mails @irko.com.br.");
   }
   S.user = user;
+  // primeiro acesso: a senha inicial definida pelo administrador precisa ser trocada
+  if (!user.user_metadata?.senha_definida) { S.trocaObrigatoria = true; return render(); }
+  S.trocaObrigatoria = false;
   carregando(true);
   try { await carregarDados(); await atualizarSelicSeNecessario(); }
   catch (e) { S.aviso = "Erro ao carregar dados: " + e.message; }
