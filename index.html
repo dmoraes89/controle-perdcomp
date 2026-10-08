@@ -398,9 +398,11 @@ const Calc = (() => {
       const d = e.d;
       if (e.tipo === "A") {
         const v = r2(num(d.valor_original));
+        const selAj = selicAcumulada(c.selic_inicio, e.data, tab).v;
         c.movimentos.push({data: e.data, tipo: "Ajuste", numero: d.descricao || "Ajuste manual", status: "",
-          saldo_antes: saldo, selic: null, selic_pdf: null, total_debitos: 0, utilizado: v, juros: 0,
-          saldo_depois: r2(saldo - v), divergencias: [], ajuste_id: d.id});
+          saldo_antes: saldo, selic: selAj, selic_pdf: null, total_debitos: 0, utilizado: v, juros: 0,
+          saldo_depois: r2(saldo - v), saldo_atualizado_depois: selAj == null ? null : r2((saldo - v) * (1 + selAj / 100)),
+          divergencias: [], ajuste_id: d.id});
         saldo = r2(saldo - v);
         continue;
       }
@@ -428,7 +430,9 @@ const Calc = (() => {
       const novo = r2(saldo - util);
       c.movimentos.push({data: d.data_transmissao, tipo: "DCOMP", numero: d.numero, status: d.status, documento_id: d.id,
         saldo_antes: saldo, selic: selCalc ?? num(d.selic_pdf), selic_pdf: num(d.selic_pdf),
-        total_debitos: excl ? 0 : total, utilizado: util, juros, saldo_depois: novo, divergencias: div});
+        total_debitos: excl ? 0 : total, utilizado: util, juros, saldo_depois: novo,
+        // equivale à coluna "Total atualizado após compensação" da planilha: saldo restante corrigido pela Selic da DCOMP
+        saldo_atualizado_depois: r2(novo * fator), divergencias: div});
       if (!excl) { c.total_utilizado += util; c.total_compensado += total; }
       saldo = novo;
     }
@@ -888,16 +892,17 @@ async function telaCredito(main) {
   if (aba === "cc") {
     box.innerHTML = c.movimentos.length ? tabela(
       [{t:"Data"},{t:"Tipo"},{t:"PER/DCOMP"},{t:"Status"},{t:"Saldo original antes",n:1},{t:"Selic acum.",n:1},{t:"Selic PDF",n:1},
-       {t:"Total dos débitos",n:1},{t:"Crédito original utilizado",n:1},{t:"Selic utilizada",n:1},{t:"Saldo original após",n:1},{t:"Conferência"}],
+       {t:"Total dos débitos",n:1},{t:"Crédito original utilizado",n:1},{t:"Selic utilizada",n:1},{t:"Saldo original após",n:1},{t:"Saldo atualizado após",n:1},{t:"Conferência"}],
       c.movimentos.map(m => `<tr><td>${dt(m.data)}</td><td>${m.tipo}</td><td>${esc(m.numero)}</td><td>${esc(m.status)}</td>
         <td class="n">${n2(m.saldo_antes)}</td><td class="n">${pct(m.selic)}</td><td class="n">${pct(m.selic_pdf)}</td>
         <td class="n">${n2(m.total_debitos)}</td><td class="n">${n2(m.utilizado)}</td><td class="n">${n2(m.juros)}</td>
-        <td class="n">${n2(m.saldo_depois)}</td>
+        <td class="n">${n2(m.saldo_depois)}</td><td class="n">${n2(m.saldo_atualizado_depois)}</td>
         <td>${m.divergencias.length ? m.divergencias.map(d => `<span class="tag alerta">${esc(d)}</span>`).join("<br>") : `<span class="tag ok">OK</span>`}</td></tr>`),
       `<tr><td colspan="7">Total</td><td class="n">${n2(c.total_compensado)}</td><td class="n">${n2(c.total_utilizado)}</td>
-        <td class="n">${n2(c.movimentos.reduce((s, m) => s + m.juros, 0))}</td><td class="n">${n2(c.saldo_original)}</td><td></td></tr>`)
+        <td class="n">${n2(c.movimentos.reduce((s, m) => s + m.juros, 0))}</td><td class="n">${n2(c.saldo_original)}</td><td></td><td></td></tr>`)
       + `<p class="nota">Selic acumulada = soma das taxas mensais do mês de início até o mês anterior ao da transmissão + 1% no mês da transmissão.
-         Crédito utilizado = débitos / (1 + Selic). Quando o PDF informa o crédito utilizado, prevalece o valor declarado; o cálculo serve de conferência.</p>`
+         Crédito utilizado = débitos / (1 + Selic). Saldo atualizado após = saldo original após × (1 + Selic da DCOMP), equivalente à coluna
+         "Total atualizado após compensação" da planilha. Quando o PDF informa o crédito utilizado, prevalece o valor declarado; o cálculo serve de conferência.</p>`
       : `<div class="msg info">Nenhuma DCOMP vinculada a este crédito até o momento.</div>`;
   }
   if (aba === "deb") {
@@ -1218,9 +1223,10 @@ async function exportarExcel(lista) {
       r = info.length + 2;
       ws.getCell(r, 1).value = "Conta-corrente do crédito"; ws.getCell(r, 1).font = {bold: true, size: 12}; r++;
       cab(ws, r, ["Data","Tipo","PER/DCOMP","Status","Saldo original antes","Selic acumulada","Total dos débitos",
-                  "Crédito original utilizado","Selic utilizada","Saldo original após","Divergências"]);
+                  "Crédito original utilizado","Selic utilizada","Saldo original após","Saldo atualizado após","Divergências"]);
       for (const m of c.movimentos) lin(ws, ++r, [toDate(m.data), m.tipo, m.numero, m.status, m.saldo_antes, m.selic, m.total_debitos,
-        m.utilizado, m.juros, m.saldo_depois, m.divergencias.join(" | ")], [DATA, , , , MOEDA, PCT, MOEDA, MOEDA, MOEDA, MOEDA]);
+        m.utilizado, m.juros, m.saldo_depois, m.saldo_atualizado_depois, m.divergencias.join(" | ")],
+        [DATA, , , , MOEDA, PCT, MOEDA, MOEDA, MOEDA, MOEDA, MOEDA]);
       const ids = c.movimentos.filter(m => m.documento_id).map(m => m.documento_id);
       const debs = await debitosDe(ids);
       if (debs.length) {
@@ -1240,7 +1246,7 @@ async function exportarExcel(lista) {
         r++; ws.getCell(r, 1).value = "Total"; ws.getCell(r, 1).font = {bold: true};
         ws.getCell(r, 4).value = {formula: `SUM(D${ini}:D${r - 1})`}; ws.getCell(r, 4).numFmt = MOEDA; ws.getCell(r, 4).font = {bold: true};
       }
-      larg(ws, [26,34,34,14,40,16,16,16,16,16,60]);
+      larg(ws, [26,34,34,14,40,16,16,16,16,16,16,60]);
     }
     const buf = await wb.xlsx.writeBuffer();
     const a = document.createElement("a");

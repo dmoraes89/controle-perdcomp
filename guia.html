@@ -229,12 +229,12 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
           </div>
           <div class="tabela">
             <table>
-              <thead><tr><th class="alvo" data-alvo="col-data">Data</th><th class="alvo" data-alvo="col-per">PER/DCOMP</th><th class="n alvo" data-alvo="col-saldo-antes">Saldo original antes</th><th class="n alvo" data-alvo="col-selic">Selic acum.</th><th class="n alvo" data-alvo="col-total">Total dos débitos</th><th class="n alvo" data-alvo="col-util">Crédito original utilizado</th><th class="n alvo" data-alvo="col-juros">Selic utilizada</th><th class="n alvo" data-alvo="col-depois">Saldo original após</th><th>Conferência</th></tr></thead>
+              <thead><tr><th class="alvo" data-alvo="col-data">Data</th><th class="alvo" data-alvo="col-per">PER/DCOMP</th><th class="n alvo" data-alvo="col-saldo-antes">Saldo original antes</th><th class="n alvo" data-alvo="col-selic">Selic acum.</th><th class="n alvo" data-alvo="col-total">Total dos débitos</th><th class="n alvo" data-alvo="col-util">Crédito original utilizado</th><th class="n alvo" data-alvo="col-juros">Selic utilizada</th><th class="n">Saldo original após</th><th class="n alvo" data-alvo="col-depois">Saldo atualizado após</th><th>Conferência</th></tr></thead>
               <tbody>
-                <tr><td>14/08/2026</td><td class="num">00000.00000.140826.1.3.02-0003</td><td class="n">100.000,00</td><td class="n">8,87%</td><td class="n">30.000,00</td><td class="n">27.555,80</td><td class="n">2.444,20</td><td class="n">72.444,20</td><td><span class="tag ok">OK</span></td></tr>
-                <tr><td>16/09/2026</td><td class="num">00000.00000.160926.1.3.02-0004</td><td class="n">72.444,20</td><td class="n">9,96%</td><td class="n">25.000,00</td><td class="n">22.735,54</td><td class="n">2.264,46</td><td class="n">49.708,66</td><td><span class="tag ok">OK</span></td></tr>
+                <tr><td>14/08/2026</td><td class="num">00000.00000.140826.1.3.02-0003</td><td class="n">100.000,00</td><td class="n">8,87%</td><td class="n">30.000,00</td><td class="n">27.555,80</td><td class="n">2.444,20</td><td class="n">72.444,20</td><td class="n">78.870,00</td><td><span class="tag ok">OK</span></td></tr>
+                <tr><td>16/09/2026</td><td class="num">00000.00000.160926.1.3.02-0004</td><td class="n">72.444,20</td><td class="n">9,96%</td><td class="n">25.000,00</td><td class="n">22.735,54</td><td class="n">2.264,46</td><td class="n">49.708,66</td><td class="n">54.659,64</td><td><span class="tag ok">OK</span></td></tr>
               </tbody>
-              <tfoot><tr><td colspan="4">Total</td><td class="n">55.000,00</td><td class="n">50.291,34</td><td class="n">4.708,66</td><td class="n">49.708,66</td><td></td></tr></tfoot>
+              <tfoot><tr><td colspan="4">Total</td><td class="n">55.000,00</td><td class="n">50.291,34</td><td class="n">4.708,66</td><td class="n">49.708,66</td><td></td><td></td></tr></tfoot>
             </table>
           </div>
           <div class="dica"><div><b>Equivale à aba do crédito na planilha</b> (por exemplo "SNIRPJ 2025"), só que com uma linha por DCOMP em vez de uma linha por débito. A coluna Conferência compara o cálculo com o que está no PDF da Receita.</div></div>
@@ -394,7 +394,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
     {l: "F", p: "Total compensado", s: "Conta-corrente, Total dos débitos", d: "Soma dos débitos da DCOMP", tela: "cc", alvo: ["col-total"]},
     {l: "G", p: "Saldo original compensado", s: "Conta-corrente, Crédito original utilizado", d: "Quanto do crédito original a DCOMP consumiu", tela: "cc", alvo: ["col-util"]},
     {l: "H", p: "Juros Selic compensado", s: "Conta-corrente, Selic utilizada", d: "Diferença entre débitos e crédito utilizado", tela: "cc", alvo: ["col-juros"]},
-    {l: "J", p: "Total atualizado após compensação", s: "Conta-corrente, Saldo original após", d: "Saldo que sobra; o valor atualizado fica no card", tela: "cc", alvo: ["col-depois"]},
+    {l: "J", p: "Total atualizado após compensação", s: "Conta-corrente, Saldo atualizado após", d: "Saldo que sobra × (1 + Selic da DCOMP); a última linha de cada DCOMP na planilha", tela: "cc", alvo: ["col-depois"]},
     {l: "K–O", p: "Competência, código DARF, principal, multa, juros", s: "Extrato, Débitos compensados", d: "Um débito por linha, como antes", tela: "deb", alvo: ["col-pa", "col-cod", "col-princ"]},
     {l: "P", p: "PERDCOMP atual", s: "Conta-corrente, coluna PER/DCOMP", d: "Número da DCOMP que gerou o movimento", tela: "cc", alvo: ["col-per"]},
     {l: "Aba", p: "Juros (juros a apropriar)", s: "Extrato, Selic a apropriar", d: "Mesmo critério de apropriação mensal", tela: "apr", alvo: ["apr-comp", "apr-selic"]},
