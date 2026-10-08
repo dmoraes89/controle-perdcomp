@@ -123,6 +123,8 @@ const STATUS_DOC = ["Transmitido","Em análise","Homologado","Homologado parcial
                     "Deferido","Indeferido","Retificado","Cancelado"];
 const STATUS_EXCLUIDOS = new Set(["Retificado","Cancelado"]);
 const TOL = 0.02;
+// domínios de e-mail com acesso ao sistema (a mesma regra está no banco, na função public.is_irko)
+const DOMINIO_PERMITIDO = /@(irko|ifhub)\.com\.br$/i;
 
 if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -735,7 +737,7 @@ function telaEsqueci() {
     <form class="login" id="frmEsqueci">
       <img src="${LOGO}" alt="Irko">
       <h1>Esqueci minha senha</h1>
-      <p class="sub">Informe o seu e-mail @irko.com.br. Se ele estiver cadastrado, você receberá um link para criar uma nova senha.</p>
+      <p class="sub">Informe o seu e-mail corporativo (@irko.com.br ou @ifhub.com.br). Se ele estiver cadastrado, você receberá um link para criar uma nova senha.</p>
       <div id="esqMsg"></div>
       <label>E-mail<input type="email" id="esqEmail" autocomplete="username" required></label>
       <button class="prim" type="submit">Enviar link</button>
@@ -745,8 +747,8 @@ function telaEsqueci() {
   $("#frmEsqueci").onsubmit = async e => {
     e.preventDefault();
     const email = $("#esqEmail").value.trim();
-    if (!/@irko\.com\.br$/i.test(email)) {
-      $("#esqMsg").innerHTML = `<div class="msg erro">Use o seu e-mail @irko.com.br.</div>`;
+    if (!DOMINIO_PERMITIDO.test(email)) {
+      $("#esqMsg").innerHTML = `<div class="msg erro">Use o seu e-mail @irko.com.br ou @ifhub.com.br.</div>`;
       return;
     }
     carregando(true);
@@ -1545,9 +1547,9 @@ async function exportarExcel(lista) {
 // INICIALIZAÇÃO
 // =====================================================================
 async function entrar(user) {
-  if (!/@irko\.com\.br$/i.test(user.email || "")) {
+  if (!DOMINIO_PERMITIDO.test(user.email || "")) {
     await sb.auth.signOut();
-    return telaLogin("Acesso restrito a e-mails @irko.com.br.");
+    return telaLogin("Acesso restrito a e-mails @irko.com.br e @ifhub.com.br.");
   }
   S.user = user;
   // primeiro acesso: a senha inicial definida pelo administrador precisa ser trocada
