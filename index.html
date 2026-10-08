@@ -129,6 +129,7 @@ const brl = v => v == null || isNaN(v) ? "-" : Number(v).toLocaleString("pt-BR",
 const n2 = v => v == null || isNaN(v) ? "-" : Number(v).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2});
 const pct = v => v == null || isNaN(v) ? "-" : n2(v) + "%";
 const dt = iso => iso ? String(iso).slice(0,10).split("-").reverse().join("/") : "";
+const dataHora = ts => ts ? new Date(ts).toLocaleString("pt-BR", {dateStyle: "short", timeStyle: "short"}) : "";
 const mesAno = ym => ym ? ym.slice(5) + "/" + ym.slice(0,4) : "-";
 const hojeISO = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
 function carregando(on){ $("#carregando").classList.toggle("oculto", !on); }
@@ -900,25 +901,47 @@ async function telaCredito(main) {
           <label>Valor original do crédito (vazio = valor do PDF)<input type="number" step="0.01" id="pValor" value="${p.valor_credito ?? ""}"></label>
         </div>
         <label style="margin-top:10px">Observação<textarea id="pObs">${esc(p.observacao || "")}</textarea></label>
-        <div style="margin-top:10px"><button class="prim" id="pSalvar">Salvar parâmetros</button></div>
+        <div class="barra" style="margin:10px 0 0;align-items:center">
+          <button class="prim" id="pSalvar">Salvar parâmetros</button>
+          <span class="nota" style="margin:0">${p.atualizado_em
+            ? `Última alteração por <b>${esc(p.atualizado_por || "usuário não identificado")}</b> em ${dataHora(p.atualizado_em)}.`
+            : "Nenhuma alteração manual: o crédito usa os valores automáticos."}</span>
+        </div>
       </div>
       <div class="caixa">
         <h2 style="margin-top:0">Ajustes manuais</h2>
         <p class="nota">Restituição recebida, glosa, despacho decisório ou outro evento que altere o saldo original. Valor positivo reduz o saldo; negativo aumenta.</p>
-        ${ajs.length ? tabela([{t:"Data"},{t:"Valor original",n:1},{t:"Descrição"},{t:"Lançado por"},{t:""}],
+        ${ajs.length ? tabela([{t:"Data do evento"},{t:"Valor original",n:1},{t:"Descrição"},{t:"Lançado por"},{t:"Lançado em"},{t:""}],
           ajs.map(a => `<tr><td>${dt(a.data)}</td><td class="n">${n2(a.valor_original)}</td><td>${esc(a.descricao)}</td>
-            <td>${esc(a.criado_por)}</td><td><button class="link" data-del="${a.id}">Excluir</button></td></tr>`)) : ""}
+            <td>${esc(a.criado_por)}</td><td>${dataHora(a.criado_em)}</td>
+            <td><button class="link" data-del="${a.id}">Excluir</button></td></tr>`)) : ""}
         <div class="barra" style="margin-top:12px">
           <label>Data<input type="date" id="aData" value="${hojeISO()}"></label>
           <label>Valor original<input type="number" step="0.01" id="aValor"></label>
           <label style="flex:1">Descrição<input id="aDesc"></label>
           <button id="aIncluir">Incluir ajuste</button>
         </div>
+      </div>
+      <div class="caixa">
+        <h2 style="margin-top:0">Histórico de alterações</h2>
+        <p class="nota">Registro automático de cada alteração de parâmetros e de cada ajuste incluído ou excluído, com usuário e data. Não pode ser editado.</p>
+        <div id="historico">Carregando...</div>
       </div>`;
+    sb.from("creditos_historico").select("*").eq("numero", c.numero).order("alterado_em", {ascending: false}).limit(200)
+      .then(({data, error}) => {
+        const h = $("#historico");
+        if (!h) return;
+        if (error) { h.innerHTML = `<div class="msg erro">Não foi possível carregar o histórico: ${esc(error.message)}</div>`; return; }
+        h.innerHTML = data.length ? tabela([{t:"Data e hora"},{t:"Usuário"},{t:"Evento"},{t:"Detalhe"}],
+            data.map(r => `<tr><td style="white-space:nowrap">${dataHora(r.alterado_em)}</td><td>${esc(r.alterado_por || "")}</td>
+              <td style="white-space:nowrap">${esc(r.evento)}</td><td>${esc(r.detalhe || "")}</td></tr>`))
+          : `<div class="msg info">Nenhuma alteração registrada para este crédito.</div>`;
+      });
     $("#pSalvar").onclick = () => acao(async () => {
       const ini = $("#pIni").value || null, v = $("#pValor").value;
+      // usuário e data são gravados pelo próprio banco
       const {error} = await sb.from("creditos").upsert({numero: c.numero, selic_inicio: ini === c.selic_inicio_padrao ? null : ini,
-        valor_credito: v === "" ? null : Number(v), observacao: $("#pObs").value || null, atualizado_em: new Date().toISOString()});
+        valor_credito: v === "" ? null : Number(v), observacao: $("#pObs").value || null});
       if (error) throw error;
     }, "Parâmetros salvos.");
     $("#aIncluir").onclick = () => {
