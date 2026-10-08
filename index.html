@@ -90,6 +90,15 @@ tr.clic:hover td{background:var(--azul-claro)}
 .sugestoes .item .l2{font-size:12px;color:var(--texto2)}
 .sugestoes .item mark{background:#FDE3D1;color:inherit;padding:0}
 .sugestoes .vazio{padding:10px 12px;color:var(--texto2);font-size:13px}
+/* extrato consolidado */
+.cons-lista{max-height:280px;overflow-y:auto;border:1px solid var(--linha);border-radius:6px;margin-top:8px}
+.cons-lista label{flex-direction:row;align-items:center;gap:10px;padding:7px 12px;border-top:1px solid var(--linha);font-weight:400;color:var(--texto);cursor:pointer}
+.cons-lista label:first-child{border-top:none}
+.cons-lista label:hover{background:var(--azul-claro)}
+.cons-lista .nome{font-weight:600;flex:1;min-width:0}
+.cons-lista .info{font-size:12px;color:var(--texto2);white-space:nowrap}
+tr.grupo-emp td{background:var(--azul-claro)!important;font-weight:700;color:var(--azul-esc)}
+tr.subtotal td{font-weight:700;border-top:2px solid var(--linha)}
 #carregando{position:fixed;inset:0;background:rgba(255,255,255,.6);display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--azul);z-index:10}
 @media (max-width:700px){main{padding:14px}header{padding:10px 14px}nav{padding:0 8px}}
 </style>
@@ -642,7 +651,7 @@ function render() {
   if (S.recuperacao) return telaSenha("recuperacao");
   if (S.trocaObrigatoria) return telaSenha("obrigatoria");
   const empSel = S.cnpj ? empresas().find(e => e.cnpj === S.cnpj) : null;
-  const views = [["painel","Painel de créditos"],["credito","Extrato do crédito"],["importar","Importar PER/DCOMP"],
+  const views = [["importar","Importar PER/DCOMP"],["painel","Painel de créditos"],["credito","Extrato do crédito"],["consolidado","Extrato dos créditos consolidado"],
                  ["documentos","Documentos"],["selic","Tabela Selic"]];
   $("#app").innerHTML = `
     <header>
@@ -671,7 +680,7 @@ function render() {
   const main = $("#conteudo");
   if (S.aviso) main.insertAdjacentHTML("beforeend", `<div class="msg aviso">${esc(S.aviso)}</div>`);
   if (S.view === "senha") return telaSenha("voluntaria");
-  ({painel: telaPainel, credito: telaCredito, importar: telaImportar, documentos: telaDocumentos, selic: telaSelic}[S.view] || telaPainel)(main);
+  ({painel: telaPainel, credito: telaCredito, consolidado: telaConsolidado, importar: telaImportar, documentos: telaDocumentos, selic: telaSelic}[S.view] || telaPainel)(main);
 }
 
 // ---------------- Troca de senha ----------------
@@ -1157,6 +1166,278 @@ function telaSelic(main) {
       if (error) throw error;
     }, "Taxa gravada.");
   };
+}
+
+// ---------------- Extrato consolidado (várias empresas) ----------------
+function lerConsSel() { try { return new Set(JSON.parse(localStorage.getItem("pd_cons_sel") || "[]")); } catch { return new Set(); } }
+function guardarConsSel() { try { localStorage.setItem("pd_cons_sel", JSON.stringify([...S.consSel])); } catch {} }
+
+function creditosConsolidados() {
+  const sel = S.consSel || new Set();
+  if (!sel.size) return [];
+  let lista = Calc.montar(S.docs.filter(d => sel.has(d.cnpj)), S.params, S.ajustes, S.selic, S.dataPos);
+  if (S.consSoSaldo) lista = lista.filter(c => c.saldo_original > 0.005);
+  return lista;
+}
+
+// agrupa por empresa, na ordem alfabética, com subtotais
+function gruposConsolidado(lista) {
+  const mapa = new Map();
+  for (const c of lista) {
+    if (!mapa.has(c.cnpj)) mapa.set(c.cnpj, {cnpj: c.cnpj, nome: c.nome_empresa || "", creditos: []});
+    mapa.get(c.cnpj).creditos.push(c);
+  }
+  const soma = (cs, f) => r2(cs.reduce((s, c) => s + (c[f] || 0), 0));
+  return [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome)).map(g => ({...g,
+    valor: soma(g.creditos, "valor_original"), utilizado: soma(g.creditos, "total_utilizado"),
+    saldo: soma(g.creditos, "saldo_original"), atualizado: soma(g.creditos, "saldo_atualizado")}));
+}
+
+function telaConsolidado(main) {
+  S.consSel ||= lerConsSel();
+  const emps = empresas();
+  main.insertAdjacentHTML("beforeend", `
+    <h1>Extrato dos créditos consolidado</h1>
+    <p class="sub">Escolha as empresas do grupo para ver os créditos somados e exportar o relatório consolidado.
+      Esta tela usa a sua própria seleção de empresas e não depende do filtro de empresa do topo.</p>
+    <div class="caixa">
+      <div class="barra" style="margin-bottom:0">
+        <label style="flex:1;min-width:240px">Buscar empresa (razão social ou CNPJ)<input id="consBusca" autocomplete="off" placeholder="Ex.: nome do grupo, 47.826 ou 47826155"></label>
+        <button id="consMarcar">Marcar as exibidas</button>
+        <button id="consRaiz" title="Marca todas as empresas com a mesma raiz de CNPJ (8 primeiros dígitos) das já marcadas">Marcar mesmo CNPJ raiz</button>
+        <button id="consLimpar">Desmarcar todas</button>
+      </div>
+      <div class="cons-lista" id="consLista">
+        ${emps.map(e => `<label data-busca="${esc(e.n + " " + e.dig + " " + normTxt(e.cnpj))}">
+          <input type="checkbox" value="${esc(e.cnpj)}" ${S.consSel.has(e.cnpj) ? "checked" : ""}>
+          <span class="nome">${esc(e.nome)}</span>
+          <span class="info">${esc(e.cnpj)} · ${e.creditos} crédito(s) · saldo original ${brl(e.saldo)}</span></label>`).join("")
+          || `<div class="nota" style="padding:10px">Nenhuma empresa cadastrada.</div>`}
+      </div>
+      <p class="nota" id="consQtd"></p>
+    </div>
+    <div class="barra">
+      <label>Posição em<input type="date" id="consData" value="${S.dataPos}"></label>
+      <label class="inline"><input type="checkbox" id="consSoSaldo" ${S.consSoSaldo ? "checked" : ""}> Somente créditos com saldo</label>
+      <div style="flex:1"></div>
+      <button class="prim" id="consExcel">Exportar consolidado para Excel</button>
+    </div>
+    <div id="consResultado"></div>`);
+
+  const lista = $("#consLista");
+  const filtrar = () => {
+    const q = normTxt($("#consBusca").value), dq = soDigitos($("#consBusca").value);
+    lista.querySelectorAll("label[data-busca]").forEach(l => {
+      const b = l.dataset.busca;
+      l.classList.toggle("oculto", !!q && !q.split(/\s+/).every(t => b.includes(t)) && !(dq.length >= 2 && b.includes(dq)));
+    });
+  };
+  const sincronizar = () => {
+    lista.querySelectorAll("input[type=checkbox]").forEach(cb => cb.checked = S.consSel.has(cb.value));
+    guardarConsSel(); desenharConsolidado();
+  };
+  $("#consBusca").oninput = filtrar;
+  lista.onchange = e => { if (e.target.type !== "checkbox") return;
+    e.target.checked ? S.consSel.add(e.target.value) : S.consSel.delete(e.target.value); guardarConsSel(); desenharConsolidado(); };
+  $("#consMarcar").onclick = () => { lista.querySelectorAll("label:not(.oculto) input").forEach(cb => S.consSel.add(cb.value)); sincronizar(); };
+  $("#consLimpar").onclick = () => { S.consSel.clear(); sincronizar(); };
+  $("#consRaiz").onclick = () => {
+    const raizes = new Set([...S.consSel].map(c => soDigitos(c).slice(0, 8)));
+    if (!raizes.size) return alert("Marque pelo menos uma empresa do grupo primeiro.");
+    emps.forEach(e => { if (raizes.has(e.dig.slice(0, 8))) S.consSel.add(e.cnpj); }); sincronizar();
+  };
+  $("#consData").onchange = e => { S.dataPos = e.target.value || hojeISO(); desenharConsolidado(); };
+  $("#consSoSaldo").onchange = e => { S.consSoSaldo = e.target.checked; desenharConsolidado(); };
+  $("#consExcel").onclick = () => {
+    const l = creditosConsolidados();
+    if (!l.length) return alert("Selecione ao menos uma empresa com créditos.");
+    exportarConsolidado(l);
+  };
+  desenharConsolidado();
+}
+
+function desenharConsolidado() {
+  const box = $("#consResultado");
+  if (!box) return;
+  const nSel = (S.consSel || new Set()).size;
+  $("#consQtd").textContent = nSel ? `${nSel} empresa(s) selecionada(s).` : "Nenhuma empresa selecionada.";
+  const lista = creditosConsolidados();
+  if (!lista.length) {
+    box.innerHTML = `<div class="msg info">${nSel ? "As empresas selecionadas não têm créditos" + (S.consSoSaldo ? " com saldo" : "") + "."
+      : "Marque as empresas do grupo na lista acima."}</div>`;
+    return;
+  }
+  const grupos = gruposConsolidado(lista);
+  const tot = f => r2(grupos.reduce((s, g) => s + g[f], 0));
+  const cols = [{t:"Tipo de crédito"},{t:"Cód. receita"},{t:"Período / PA"},{t:"PER/DCOMP de origem"},{t:"Início Selic"},
+    {t:"Valor original",n:1},{t:"Utilizado",n:1},{t:"Saldo original",n:1},{t:"Selic acum.",n:1},{t:"Saldo atualizado",n:1}];
+  const linhas = grupos.flatMap(g => [
+    `<tr class="grupo-emp"><td colspan="10">${esc(g.nome)} · CNPJ ${esc(g.cnpj)} · ${g.creditos.length} crédito(s)</td></tr>`,
+    ...g.creditos.map(c => `<tr class="clic" data-num="${esc(c.numero)}" data-cnpj="${esc(c.cnpj)}">
+      <td>${esc(c.tipo_credito)}</td><td>${esc(codigoTxt(c))}</td><td>${esc(periodoTxt(c))}</td><td>${esc(c.numero)}</td>
+      <td>${mesAno(c.selic_inicio)}</td><td class="n">${n2(c.valor_original)}</td><td class="n">${n2(c.total_utilizado)}</td>
+      <td class="n">${n2(c.saldo_original)}</td><td class="n">${pct(c.selic_hoje)}</td><td class="n">${n2(c.saldo_atualizado)}</td></tr>`),
+    `<tr class="subtotal"><td colspan="5">Subtotal ${esc(g.nome)}</td><td class="n">${n2(g.valor)}</td><td class="n">${n2(g.utilizado)}</td>
+      <td class="n">${n2(g.saldo)}</td><td></td><td class="n">${n2(g.atualizado)}</td></tr>`]);
+  box.innerHTML = cards([
+      ["Empresas", String(grupos.length)],
+      ["Valor original dos créditos", brl(tot("valor"))],
+      ["Crédito original utilizado", brl(tot("utilizado"))],
+      ["Saldo original", brl(tot("saldo"))],
+      [`Saldo atualizado em ${dt(S.dataPos)}`, brl(tot("atualizado")), true]])
+    + tabela(cols, linhas,
+      `<tr><td colspan="5">Total consolidado (${grupos.length} empresa(s))</td><td class="n">${n2(tot("valor"))}</td><td class="n">${n2(tot("utilizado"))}</td>
+        <td class="n">${n2(tot("saldo"))}</td><td></td><td class="n">${n2(tot("atualizado"))}</td></tr>`)
+    + `<p class="nota">Clique em um crédito para abrir o extrato dele.</p>`;
+  box.querySelectorAll("tr.clic").forEach(tr => tr.onclick = () => {
+    S.cnpj = tr.dataset.cnpj; S.creditoSel = tr.dataset.num; location.hash = "credito";
+  });
+}
+
+async function exportarConsolidado(lista) {
+  carregando(true);
+  try {
+    const grupos = gruposConsolidado(lista);
+    const wb = new ExcelJS.Workbook();
+    const MOEDA = '#,##0.00;[Red]-#,##0.00', PCT = '0.00"%"', DATA = "dd/mm/yyyy";
+    const AZUL = "FF61729F", AZUL_CLARO = "FFE8EBF3", LARANJA = "FFF58547";
+    const toDate = iso => iso ? new Date(String(iso).slice(0, 10) + "T12:00:00") : null;
+    const cab = (ws, r, tit) => { const row = ws.getRow(r); tit.forEach((t, i) => { const c = row.getCell(i + 1); c.value = t;
+      c.font = {bold: true, color: {argb: "FFFFFFFF"}}; c.fill = {type: "pattern", pattern: "solid", fgColor: {argb: AZUL}};
+      c.alignment = {wrapText: true, vertical: "middle", horizontal: "center"}; }); row.height = 30; };
+    const lin = (ws, r, vals, fmts) => { const row = ws.getRow(r); vals.forEach((v, i) => { const c = row.getCell(i + 1); c.value = v ?? null;
+      if (fmts[i]) c.numFmt = fmts[i]; c.border = {bottom: {style: "thin", color: {argb: "FFD9DCE3"}}}; }); };
+    const botao = (cell, texto, destino) => {
+      cell.value = {text: texto, hyperlink: `#'${destino}'!A1`};
+      cell.font = {bold: true, color: {argb: "FFFFFFFF"}, underline: false};
+      cell.fill = {type: "pattern", pattern: "solid", fgColor: {argb: LARANJA}};
+      cell.alignment = {horizontal: "center", vertical: "middle"};
+      cell.border = {top: {style: "thin", color: {argb: LARANJA}}, bottom: {style: "thin", color: {argb: LARANJA}},
+                     left: {style: "thin", color: {argb: LARANJA}}, right: {style: "thin", color: {argb: LARANJA}}};
+    };
+
+    // nomes das abas por empresa (máx. 31 caracteres, sem caracteres proibidos, sem repetir)
+    const usados = new Set(["Resumo"]);
+    for (const g of grupos) {
+      const base = (g.nome || g.cnpj).replace(/[\\\/*?:\[\]']/g, " ").replace(/\s+/g, " ").trim().slice(0, 24) + " " + soDigitos(g.cnpj).slice(8, 12);
+      let nome = base.slice(0, 31), i = 2;
+      while (usados.has(nome)) nome = `${base.slice(0, 27)}(${i++})`;
+      usados.add(nome); g.aba = nome;
+    }
+
+    // ---- Resumo: empresa por empresa, uma embaixo da outra ----
+    const res = wb.addWorksheet("Resumo");
+    res.getCell("A1").value = "Extrato consolidado de créditos PER/DCOMP";
+    res.getCell("A1").font = {bold: true, size: 14, color: {argb: AZUL}};
+    res.getCell("A2").value = `Posição em ${dt(S.dataPos)} · ${grupos.length} empresa(s)${S.consSoSaldo ? " · somente créditos com saldo" : ""}`;
+    const COLS = ["Tipo de crédito","Cód. receita","Período / PA","PER/DCOMP de origem","Status","Início Selic",
+                  "Valor original","Crédito original utilizado","Saldo original","Selic acumulada","Saldo atualizado"];
+    const FMT = [, , , , , , MOEDA, MOEDA, MOEDA, PCT, MOEDA];
+    let r = 4;
+    const subtotais = [];
+    for (const g of grupos) {
+      const t = res.getRow(r);
+      res.mergeCells(r, 1, r, 9);
+      t.getCell(1).value = `${g.nome}  ·  CNPJ ${g.cnpj}  ·  ${g.creditos.length} crédito(s)`;
+      t.getCell(1).font = {bold: true, size: 12, color: {argb: "FF1F2430"}};
+      t.getCell(1).fill = {type: "pattern", pattern: "solid", fgColor: {argb: AZUL_CLARO}};
+      res.mergeCells(r, 10, r, 11);
+      botao(t.getCell(10), "Ver composição ›", g.aba);
+      t.height = 22;
+      r++;
+      cab(res, r, COLS); r++;
+      const ini = r;
+      for (const c of g.creditos) lin(res, r++, [c.tipo_credito, codigoTxt(c), periodoTxt(c), c.numero, c.status, mesAno(c.selic_inicio),
+        c.valor_original, c.total_utilizado, c.saldo_original, c.selic_hoje, c.saldo_atualizado], FMT);
+      const sub = res.getRow(r);
+      sub.getCell(1).value = `Subtotal ${g.nome}`;
+      for (const col of ["G", "H", "I", "K"]) { const c = res.getCell(`${col}${r}`); c.value = {formula: `SUM(${col}${ini}:${col}${r - 1})`}; c.numFmt = MOEDA; }
+      sub.font = {bold: true};
+      sub.eachCell(c => c.border = {top: {style: "thin", color: {argb: AZUL}}});
+      subtotais.push(r);
+      r += 2;
+    }
+    const tt = res.getRow(r);
+    tt.getCell(1).value = `Total consolidado (${grupos.length} empresa(s))`;
+    for (const col of ["G", "H", "I", "K"]) {
+      const c = res.getCell(`${col}${r}`); c.value = {formula: subtotais.map(s => `${col}${s}`).join("+")}; c.numFmt = MOEDA;
+    }
+    tt.font = {bold: true, size: 12, color: {argb: "FFFFFFFF"}};
+    tt.eachCell(c => c.fill = {type: "pattern", pattern: "solid", fgColor: {argb: AZUL}});
+    for (let col = 1; col <= 11; col++) { const c = tt.getCell(col); if (!c.fill) c.fill = {type: "pattern", pattern: "solid", fgColor: {argb: AZUL}}; }
+    [30, 12, 22, 34, 14, 11, 16, 16, 16, 11, 16].forEach((w, i) => res.getColumn(i + 1).width = w);
+    res.views = [{state: "frozen", ySplit: 2}];
+
+    // ---- Uma aba por empresa com a composição ----
+    const docPorId = Object.fromEntries(S.docs.map(d => [d.id, d]));
+    const todosIds = lista.flatMap(c => c.movimentos.filter(m => m.documento_id).map(m => m.documento_id));
+    const debs = await debitosDe(todosIds);
+    for (const g of grupos) {
+      const ws = wb.addWorksheet(g.aba);
+      botao(ws.getCell("A1"), "‹ Voltar ao resumo", "Resumo");
+      ws.getCell("B1").value = g.nome; ws.getCell("B1").font = {bold: true, size: 14, color: {argb: AZUL}};
+      ws.getCell("B2").value = `CNPJ ${g.cnpj} · posição em ${dt(S.dataPos)}`;
+      let r = 4;
+      ws.getCell(r, 1).value = "Créditos da empresa"; ws.getCell(r, 1).font = {bold: true, size: 12}; r++;
+      cab(ws, r, COLS); r++;
+      const ini = r;
+      for (const c of g.creditos) lin(ws, r++, [c.tipo_credito, codigoTxt(c), periodoTxt(c), c.numero, c.status, mesAno(c.selic_inicio),
+        c.valor_original, c.total_utilizado, c.saldo_original, c.selic_hoje, c.saldo_atualizado], FMT);
+      ws.getCell(r, 1).value = "Total"; ws.getRow(r).font = {bold: true};
+      for (const col of ["G", "H", "I", "K"]) { const c = ws.getCell(`${col}${r}`); c.value = {formula: `SUM(${col}${ini}:${col}${r - 1})`}; c.numFmt = MOEDA; }
+      r += 2;
+
+      for (const c of g.creditos) {
+        const t = ws.getRow(r);
+        ws.mergeCells(r, 1, r, 11);
+        t.getCell(1).value = `${c.tipo_credito}${codigoTxt(c) ? " · cód. " + codigoTxt(c) : ""} · ${periodoTxt(c) || "sem período"} · ${c.numero}`;
+        t.getCell(1).font = {bold: true, size: 12, color: {argb: "FF1F2430"}};
+        t.getCell(1).fill = {type: "pattern", pattern: "solid", fgColor: {argb: AZUL_CLARO}};
+        r++;
+        if (origemInfo(c)) { ws.getCell(r, 1).value = "Origem do crédito: " + origemInfo(c).detalhe; r++; }
+        if (c.avisos.length) { ws.getCell(r, 1).value = "Avisos: " + c.avisos.join(" | "); ws.getCell(r, 1).font = {color: {argb: "FFA4501C"}}; r++; }
+        ws.getCell(r, 1).value = "Conta-corrente"; ws.getCell(r, 1).font = {bold: true}; r++;
+        cab(ws, r, ["Data","Tipo","PER/DCOMP","Status","Saldo original antes","Selic acumulada","Total dos débitos",
+                    "Crédito original utilizado","Selic utilizada","Saldo original após","Saldo atualizado após","Divergências"]);
+        if (!c.movimentos.length) { r++; ws.getCell(r, 1).value = "Nenhuma DCOMP vinculada."; }
+        for (const m of c.movimentos) lin(ws, ++r, [toDate(m.data), m.tipo, m.numero, m.status, m.saldo_antes, m.selic, m.total_debitos,
+          m.utilizado, m.juros, m.saldo_depois, m.saldo_atualizado_depois, m.divergencias.join(" | ")],
+          [DATA, , , , MOEDA, PCT, MOEDA, MOEDA, MOEDA, MOEDA, MOEDA]);
+        r += 2;
+        const ids = new Set(c.movimentos.filter(m => m.documento_id).map(m => m.documento_id));
+        const dd = debs.filter(d => ids.has(d.documento_id)).sort((a, b) =>
+          (docPorId[a.documento_id]?.data_transmissao || "").localeCompare(docPorId[b.documento_id]?.data_transmissao || "") || a.documento_id - b.documento_id || a.seq - b.seq);
+        if (dd.length) {
+          ws.getCell(r, 1).value = "Débitos compensados"; ws.getCell(r, 1).font = {bold: true}; r++;
+          cab(ws, r, ["Data DCOMP","PER/DCOMP","Grupo","Código","Denominação","Período de apuração","Vencimento","Principal","Multa","Juros","Total"]);
+          for (const d of dd) { const doc = docPorId[d.documento_id] || {};
+            lin(ws, ++r, [toDate(doc.data_transmissao), doc.numero, d.grupo, d.codigo_receita, d.denominacao, d.periodo_apuracao,
+              toDate(d.vencimento), num(d.principal), num(d.multa), num(d.juros), num(d.total)], [DATA, , , , , , DATA, MOEDA, MOEDA, MOEDA, MOEDA]); }
+          r += 2;
+        }
+        const apr = Calc.apropriar(c, S.dataPos, S.selic);
+        if (apr.length) {
+          ws.getCell(r, 1).value = "Selic a apropriar por competência"; ws.getCell(r, 1).font = {bold: true}; r++;
+          cab(ws, r, ["Competência","Saldo original no início do mês","Taxa","Selic do mês"]);
+          const ia = r + 1;
+          for (const a of apr) lin(ws, ++r, [a.competencia, a.saldo, a.taxa, a.selic], [, MOEDA, PCT, MOEDA]);
+          r++; ws.getCell(r, 1).value = "Total"; ws.getCell(r, 1).font = {bold: true};
+          ws.getCell(r, 4).value = {formula: `SUM(D${ia}:D${r - 1})`}; ws.getCell(r, 4).numFmt = MOEDA; ws.getCell(r, 4).font = {bold: true};
+          r += 2;
+        }
+        r++;
+      }
+      [24, 34, 34, 34, 40, 16, 16, 16, 16, 16, 16, 50].forEach((w, i) => ws.getColumn(i + 1).width = w);
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([buf], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+    a.download = `Extrato consolidado PERDCOMP ${S.dataPos}.xlsx`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (e) { alert("Erro ao gerar o Excel: " + e.message); }
+  finally { carregando(false); }
 }
 
 // ---------------- Ações e exportação ----------------
