@@ -227,6 +227,29 @@ const PD = (() => {
       return d;
     });
   }
+  // Bloco "ORIGEM DO CRÉDITO" (pagamento indevido ou a maior): um item por DARF
+  function origemCredito(t) {
+    const ini = t.search(/^ORIGEM DO CRÉDITO/m);
+    if (ini < 0) return null;
+    let sec = t.slice(ini).split("\n").slice(1).join("\n");
+    const fim = sec.search(/^(CRÉDITO|DÉBITO|DADOS|IDENTIFICAÇÃO|PAGAMENTOS|TOTAL)\b/m);
+    if (fim >= 0) sec = sec.slice(0, fim);
+    const itens = [...sec.matchAll(/^(\d+)\.\s*Período de Apuração\s+(\S+)/gm)];
+    const lista = itens.map((m, i) => {
+      const blk = sec.slice(m.index, i + 1 < itens.length ? itens[i + 1].index : sec.length);
+      const cod = (campo(blk, "Código da Receita") || "").match(/\d{4}(-\d{2})?/);
+      return {
+        periodo: periodo(m[2]), periodo_apuracao: brData(m[2]),
+        codigo: cod ? cod[0] : "",
+        documento: campo(blk, "Número do Documento de Arrecadação"),
+        data_arrecadacao: brData(campo(blk, "Data de Arrecadação")),
+        principal: brNum(campo(blk, "Valor do Principal")), multa: brNum(campo(blk, "Valor da Multa")),
+        juros: brNum(campo(blk, "Valor dos Juros")), total: brNum(campo(blk, "Valor Total")),
+      };
+    });
+    return lista.length ? lista : null;
+  }
+
   function interpretar(paginas) {
     const raw = paginas.join("\n");
     const m = raw.match(new RegExp(`CNPJ ([\\d./-]+) (${NUM})`));
@@ -262,6 +285,8 @@ const PD = (() => {
     doc.saldo_credito_original = brNum(campo(t, "Saldo do Crédito Original"));
     doc.valor_pedido = brNum(campo(t, "Valor do Pedido de Restituição") || campo(t, "Valor do Pedido de Ressarcimento")
                              || campo(t, "Valor do Pedido de Reembolso"));
+    doc.origem_credito = origemCredito(t);
+    if (!doc.data_arrecadacao && doc.origem_credito?.length) doc.data_arrecadacao = doc.origem_credito[0].data_arrecadacao;
     doc.debitos = [];
     if (/compensa/i.test(doc.tipo_documento)) {
       doc.debitos = debitos(t);
@@ -275,7 +300,7 @@ const PD = (() => {
     return doc;
   }
   async function lerPdf(buf) { return interpretar(await textoPaginas(buf)); }
-  return {lerPdf, interpretar, textoPaginas};
+  return {lerPdf, interpretar, textoPaginas, origemCredito};
 })();
 
 // =====================================================================
@@ -344,6 +369,7 @@ const Calc = (() => {
         tipo_documento: origem ? origem.tipo_documento : "(não importado)",
         data_transmissao: origem ? origem.data_transmissao : null,
         periodo: ref.periodo_ini && ref.periodo_fim ? `${dt(ref.periodo_ini)} a ${dt(ref.periodo_fim)}` : "",
+        origem: (origem || ref).origem_credito || gdocs.find(d => d.origem_credito)?.origem_credito || null,
         valor_original: r2(valor), selic_inicio: selicIni, selic_inicio_padrao: padrao,
         observacao: p.observacao || "", status: origem ? origem.status : "", avisos, movimentos: [],
         total_utilizado: 0, total_compensado: 0,
@@ -485,6 +511,20 @@ async function debitosDe(ids) {
   }
   return out;
 }
+
+// Origem do crédito de pagamento indevido ou a maior: códigos de receita e períodos de apuração dos DARFs
+function origemInfo(c) {
+  const o = Array.isArray(c.origem) ? c.origem : [];
+  if (!o.length) return null;
+  const unicos = a => [...new Set(a.filter(Boolean))];
+  return {
+    codigos: unicos(o.map(x => x.codigo)).join(", "),
+    periodos: unicos(o.map(x => x.periodo)).join(", "),
+    detalhe: o.map(x => `DARF ${x.codigo || "?"}, PA ${x.periodo || "?"}, arrecadado em ${dt(x.data_arrecadacao) || "?"}, total ${n2(x.total)}`).join("; "),
+  };
+}
+const periodoTxt = c => c.periodo || (origemInfo(c) ? "PA " + origemInfo(c).periodos : "");
+const codigoTxt = c => origemInfo(c)?.codigos || "";
 
 const docsFiltrados = () => S.cnpj ? S.docs.filter(d => d.cnpj === S.cnpj) : S.docs;
 const creditos = () => Calc.montar(docsFiltrados(), S.params, S.ajustes, S.selic, S.dataPos);
@@ -784,15 +824,16 @@ function telaPainel(main) {
       ["Saldo original", brl(soma("saldo_original"))],
       [`Saldo atualizado em ${dt(S.dataPos)}`, brl(soma("saldo_atualizado")), true],
     ]) + tabela(
-      [{t:"Empresa"},{t:"Tipo de crédito"},{t:"Período"},{t:"PER/DCOMP de origem"},{t:"Início Selic"},{t:"Valor original",n:1},
+      [{t:"Empresa"},{t:"Tipo de crédito"},{t:"Cód. receita"},{t:"Período / PA"},{t:"PER/DCOMP de origem"},{t:"Início Selic"},{t:"Valor original",n:1},
        {t:"Utilizado",n:1},{t:"Saldo original",n:1},{t:"Selic acum.",n:1},{t:"Saldo atualizado",n:1},{t:"DCOMPs",n:1},{t:"Conferência"}],
       lista.map(c => `<tr class="clic" data-num="${esc(c.numero)}">
-        <td>${esc(c.nome_empresa)}</td><td>${esc(c.tipo_credito)}</td><td>${esc(c.periodo)}</td><td>${esc(c.numero)}</td>
+        <td>${esc(c.nome_empresa)}</td><td>${esc(c.tipo_credito)}</td>
+        <td title="${esc(origemInfo(c)?.detalhe || "")}">${esc(codigoTxt(c))}</td><td>${esc(periodoTxt(c))}</td><td>${esc(c.numero)}</td>
         <td>${mesAno(c.selic_inicio)}</td><td class="n">${n2(c.valor_original)}</td><td class="n">${n2(c.total_utilizado)}</td>
         <td class="n">${n2(c.saldo_original)}</td><td class="n">${pct(c.selic_hoje)}</td><td class="n">${n2(c.saldo_atualizado)}</td>
         <td class="n">${c.movimentos.filter(m => m.tipo === "DCOMP").length}</td>
         <td>${nAlertas(c) ? `<span class="tag alerta">${nAlertas(c)} alerta(s)</span>` : `<span class="tag ok">OK</span>`}</td></tr>`),
-      `<tr><td colspan="5">Total</td><td class="n">${n2(soma("valor_original"))}</td><td class="n">${n2(soma("total_utilizado"))}</td>
+      `<tr><td colspan="6">Total</td><td class="n">${n2(soma("valor_original"))}</td><td class="n">${n2(soma("total_utilizado"))}</td>
         <td class="n">${n2(soma("saldo_original"))}</td><td></td><td class="n">${n2(soma("saldo_atualizado"))}</td><td colspan="2"></td></tr>`)
       + `<p class="nota">Clique em um crédito para abrir o extrato.</p>`
     : S.cnpj ? `<div class="msg info">Nenhum crédito ${so ? "com saldo " : ""}para a empresa selecionada.</div>`
@@ -820,7 +861,7 @@ async function telaCredito(main) {
     <div class="barra">
       <label style="flex:1;min-width:280px">Crédito
         <select id="selCredito">${lista.map(x => `<option value="${esc(x.numero)}" ${x.numero === c.numero ? "selected" : ""}>
-          ${esc(x.nome_empresa)} | ${esc(x.tipo_credito)} | ${esc(x.periodo || "sem período")} | ${esc(x.numero)}</option>`).join("")}</select>
+          ${esc(x.nome_empresa)} | ${esc(x.tipo_credito)}${codigoTxt(x) ? " " + esc(codigoTxt(x)) : ""} | ${esc(periodoTxt(x) || "sem período")} | ${esc(x.numero)}</option>`).join("")}</select>
       </label>
       <label>Posição em<input type="date" id="dataPos" value="${S.dataPos}"></label>
       <button id="btnExcel">Exportar para Excel</button>
@@ -829,7 +870,8 @@ async function telaCredito(main) {
     ${cards([["Valor original", brl(c.valor_original)], ["Crédito original utilizado", brl(c.total_utilizado)],
              ["Saldo original", brl(c.saldo_original)], [`Selic acumulada em ${dt(S.dataPos)}`, pct(c.selic_hoje)],
              ["Saldo atualizado", brl(c.saldo_atualizado), true]])}
-    <p class="sub">${esc(c.nome_empresa)} | CNPJ ${esc(c.cnpj)} | ${esc(c.tipo_credito)} | Período ${esc(c.periodo || "-")} |
+    ${origemInfo(c) ? `<div class="msg info"><b>Origem do crédito:</b> ${esc(origemInfo(c).detalhe)}</div>` : ""}
+    <p class="sub">${esc(c.nome_empresa)} | CNPJ ${esc(c.cnpj)} | ${esc(c.tipo_credito)} | Período ${esc(periodoTxt(c) || "-")} |
       Origem: ${esc(c.tipo_documento)} ${esc(c.numero)}${c.data_transmissao ? ` transmitido em ${dt(c.data_transmissao)}` : ""} |
       Início da Selic: ${mesAno(c.selic_inicio)}</p>
     <div class="abas">
@@ -1149,7 +1191,8 @@ async function exportarExcel(lista) {
     cab(res, 4, ["Empresa","CNPJ","Tipo de crédito","Período","PER/DCOMP de origem","Status","Início Selic","Valor original",
                  "Crédito original utilizado","Débitos compensados","Saldo original","Selic acumulada","Saldo atualizado","Avisos"]);
     let r = 5;
-    for (const c of lista) lin(res, r++, [c.nome_empresa, c.cnpj, c.tipo_credito, c.periodo, c.numero, c.status, mesAno(c.selic_inicio),
+    for (const c of lista) lin(res, r++, [c.nome_empresa, c.cnpj,
+      c.tipo_credito + (codigoTxt(c) ? ` (cód. ${codigoTxt(c)})` : ""), periodoTxt(c), c.numero, c.status, mesAno(c.selic_inicio),
       c.valor_original, c.total_utilizado, c.total_compensado, c.saldo_original, c.selic_hoje, c.saldo_atualizado, c.avisos.join(" | ")],
       [, , , , , , , MOEDA, MOEDA, MOEDA, MOEDA, PCT, MOEDA]);
     res.getCell(`A${r}`).value = "Total"; res.getCell(`A${r}`).font = {bold: true};
@@ -1165,7 +1208,8 @@ async function exportarExcel(lista) {
       let nome = `${ab} ${c.numero.slice(-9)}`.replace(/[\\\/*?:\[\]]/g, "-").slice(0, 31), i = 2;
       const base = nome; while (usados.has(nome)) nome = `${base.slice(0, 28)}(${i++})`; usados.add(nome);
       const ws = wb.addWorksheet(nome);
-      const info = [["Empresa", c.nome_empresa], ["CNPJ", c.cnpj], ["Tipo de crédito", c.tipo_credito], ["Período", c.periodo],
+      const info = [["Empresa", c.nome_empresa], ["CNPJ", c.cnpj], ["Tipo de crédito", c.tipo_credito], ["Período", periodoTxt(c)],
+        ...(origemInfo(c) ? [["Código da receita (origem)", codigoTxt(c)], ["Origem do crédito", origemInfo(c).detalhe]] : []),
         ["PER/DCOMP de origem", c.numero], ["Status", c.status], ["Início da Selic", mesAno(c.selic_inicio)],
         ["Valor original do crédito", c.valor_original, MOEDA], ["Saldo original", c.saldo_original, MOEDA],
         [`Selic acumulada em ${dt(S.dataPos)}`, c.selic_hoje, PCT], ["Saldo atualizado", c.saldo_atualizado, MOEDA], ["Observação", c.observacao]];
