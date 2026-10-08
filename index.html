@@ -74,6 +74,22 @@ tr.clic:hover td{background:var(--azul-claro)}
 .login img{height:40px;align-self:center}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
 .oculto{display:none!important}
+/* busca de empresa no topo */
+.busca-emp{position:relative;width:min(380px,100%)}
+.busca-emp input{width:100%}
+.chip-emp{display:flex;align-items:center;gap:8px;border:1px solid var(--azul);background:var(--azul-claro);border-radius:6px;padding:5px 6px 5px 10px;cursor:pointer;width:100%}
+.chip-emp .nome{font-weight:600;color:var(--texto);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.chip-emp .cnpj{font-size:12px;color:var(--texto2);white-space:nowrap}
+.chip-emp button{border:none;background:none;padding:0 6px;font-size:16px;line-height:1;color:var(--texto2)}
+.sugestoes{position:absolute;z-index:30;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid var(--linha);border-radius:8px;
+  box-shadow:0 8px 24px rgba(31,36,48,.15);max-height:360px;overflow-y:auto;padding:4px 0}
+.sugestoes .grupo{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--texto2);padding:8px 12px 4px}
+.sugestoes .item{padding:7px 12px;cursor:pointer;display:flex;flex-direction:column;gap:1px}
+.sugestoes .item.ativo,.sugestoes .item:hover{background:var(--azul-claro)}
+.sugestoes .item .l1{font-weight:600;font-size:13px}
+.sugestoes .item .l2{font-size:12px;color:var(--texto2)}
+.sugestoes .item mark{background:#FDE3D1;color:inherit;padding:0}
+.sugestoes .vazio{padding:10px 12px;color:var(--texto2);font-size:13px}
 #carregando{position:fixed;inset:0;background:rgba(255,255,255,.6);display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--azul);z-index:10}
 @media (max-width:700px){main{padding:14px}header{padding:10px 14px}nav{padding:0 8px}}
 </style>
@@ -445,6 +461,7 @@ async function carregarDados() {
   S.params = Object.fromEntries(params.map(p => [p.numero, p]));
   S.ajustes = ajustes;
   S.selicLinhas = selic.reverse();
+  S._empresas = null;
   S.selic = Object.fromEntries(selic.map(s => [s.competencia, Number(s.taxa)]));
 }
 
@@ -471,6 +488,105 @@ async function debitosDe(ids) {
 const docsFiltrados = () => S.cnpj ? S.docs.filter(d => d.cnpj === S.cnpj) : S.docs;
 const creditos = () => Calc.montar(docsFiltrados(), S.params, S.ajustes, S.selic, S.dataPos);
 
+// ---------------- Busca de empresa (razão social ou CNPJ) ----------------
+const normTxt = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+const soDigitos = s => String(s || "").replace(/\D/g, "");
+
+// Uma linha por CNPJ, com quantidade de créditos e saldo original (recalculado quando os dados mudam)
+function empresas() {
+  if (S._empresas) return S._empresas;
+  const mapa = {};
+  for (const c of Calc.montar(S.docs, S.params, S.ajustes, S.selic, hojeISO())) {
+    const e = mapa[c.cnpj] ||= {cnpj: c.cnpj, nome: c.nome_empresa || "", creditos: 0, saldo: 0};
+    e.creditos++; e.saldo += c.saldo_original || 0;
+  }
+  for (const d of S.docs) mapa[d.cnpj] ||= {cnpj: d.cnpj, nome: d.nome_empresa || "", creditos: 0, saldo: 0};
+  return S._empresas = Object.values(mapa).map(e => ({...e, n: normTxt(e.nome), dig: soDigitos(e.cnpj)}))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+function buscarEmpresas(q) {
+  const nq = normTxt(q), dq = soDigitos(q);
+  const termos = nq.split(/\s+/).filter(Boolean);
+  const peso = e => e.n.startsWith(nq) || (dq && e.dig.startsWith(dq)) ? 0 : 1;
+  return empresas().filter(e =>
+      termos.every(t => e.n.includes(t)) || (dq.length >= 2 && e.dig.includes(dq)) || normTxt(e.cnpj).includes(nq))
+    .sort((a, b) => peso(a) - peso(b) || a.nome.localeCompare(b.nome));
+}
+
+function lerRecentes() { try { return JSON.parse(localStorage.getItem("pd_emp_recentes") || "[]"); } catch { return []; } }
+function guardarRecente(cnpj) {
+  try { localStorage.setItem("pd_emp_recentes", JSON.stringify([cnpj, ...lerRecentes().filter(c => c !== cnpj)].slice(0, 6))); } catch {}
+}
+
+function selecionarEmpresa(cnpj) {
+  S.cnpj = cnpj || ""; S.creditoSel = null; S.trocandoEmp = false;
+  if (cnpj) guardarRecente(cnpj);
+  render();
+}
+
+function destacarTrecho(texto, q) {
+  const nq = normTxt(q);
+  if (!nq) return esc(texto);
+  const i = normTxt(texto).indexOf(nq);   // normalização preserva o comprimento em textos com acento comum
+  if (i < 0) return esc(texto);
+  return esc(texto.slice(0, i)) + "<mark>" + esc(texto.slice(i, i + nq.length)) + "</mark>" + esc(texto.slice(i + nq.length));
+}
+
+function ligarBuscaEmpresa() {
+  const chip = $("#empChip");
+  if (chip) {
+    $("#empLimpar").onclick = ev => { ev.stopPropagation(); selecionarEmpresa(""); };
+    chip.onclick = () => { S.trocandoEmp = true; render(); $("#empBusca")?.focus(); };
+    return;
+  }
+  const inp = $("#empBusca"), box = $("#empSug");
+  let itens = [], ativo = -1;
+  const linhaEmp = (e, q) => `<div class="item" role="option" data-cnpj="${esc(e.cnpj)}">
+      <span class="l1">${destacarTrecho(e.nome, q)}</span>
+      <span class="l2">${destacarTrecho(e.cnpj, q)} · ${e.creditos} crédito(s) · saldo original ${brl(e.saldo)}</span></div>`;
+  function abrir() {
+    const q = inp.value.trim();
+    let html = "";
+    if (!q) {
+      const rec = lerRecentes().map(c => empresas().find(e => e.cnpj === c)).filter(Boolean);
+      itens = [{cnpj: ""}, ...rec];
+      html = `<div class="item" role="option" data-cnpj=""><span class="l1">Todas as empresas</span>
+                <span class="l2">${empresas().length} empresa(s) cadastrada(s)</span></div>`
+        + (rec.length ? `<div class="grupo">Consultadas recentemente</div>` + rec.map(e => linhaEmp(e, "")).join("")
+                      : `<div class="vazio">Digite parte da razão social ou do CNPJ.</div>`);
+    } else {
+      const achados = buscarEmpresas(q);
+      itens = achados.slice(0, 50);
+      html = itens.length ? itens.map(e => linhaEmp(e, q)).join("")
+        + (achados.length > 50 ? `<div class="vazio">Mais ${achados.length - 50} empresa(s). Refine a busca.</div>` : "")
+        : `<div class="vazio">Nenhuma empresa encontrada para "${esc(q)}".</div>`;
+    }
+    box.innerHTML = html;
+    box.classList.remove("oculto");
+    inp.setAttribute("aria-expanded", "true");
+    ativo = q && itens.length ? 0 : -1;
+    marcar();
+    box.querySelectorAll(".item").forEach((el, i) => {
+      el.onmousedown = ev => { ev.preventDefault(); selecionarEmpresa(el.dataset.cnpj); };
+    });
+  }
+  function fechar() { box.classList.add("oculto"); inp.setAttribute("aria-expanded", "false"); }
+  function marcar() {
+    box.querySelectorAll(".item").forEach((el, i) => el.classList.toggle("ativo", i === ativo));
+    box.querySelectorAll(".item")[ativo]?.scrollIntoView({block: "nearest"});
+  }
+  inp.onfocus = abrir;
+  inp.oninput = abrir;
+  inp.onblur = () => setTimeout(() => { fechar(); if (S.trocandoEmp) { S.trocandoEmp = false; render(); } }, 150);
+  inp.onkeydown = ev => {
+    if (ev.key === "ArrowDown") { ev.preventDefault(); if (box.classList.contains("oculto")) abrir(); ativo = Math.min(ativo + 1, itens.length - 1); marcar(); }
+    else if (ev.key === "ArrowUp") { ev.preventDefault(); ativo = Math.max(ativo - 1, 0); marcar(); }
+    else if (ev.key === "Enter") { ev.preventDefault(); if (itens[ativo]) selecionarEmpresa(itens[ativo].cnpj); }
+    else if (ev.key === "Escape") { inp.value = ""; fechar(); inp.blur(); }
+  };
+}
+
 // =====================================================================
 // TELAS
 // =====================================================================
@@ -478,9 +594,9 @@ function render() {
   const c = cfg();
   if (!c.url || !c.key) return telaConfig();
   if (!S.user) return telaLogin();
-  if (S.trocaObrigatoria) return telaSenha(true);
-  const emps = {};
-  S.docs.forEach(d => emps[d.cnpj] = d.nome_empresa);
+  if (S.recuperacao) return telaSenha("recuperacao");
+  if (S.trocaObrigatoria) return telaSenha("obrigatoria");
+  const empSel = S.cnpj ? empresas().find(e => e.cnpj === S.cnpj) : null;
   const views = [["painel","Painel de créditos"],["credito","Extrato do crédito"],["importar","Importar PER/DCOMP"],
                  ["documentos","Documentos"],["selic","Tabela Selic"]];
   $("#app").innerHTML = `
@@ -488,13 +604,16 @@ function render() {
       <img src="${LOGO}" alt="Irko">
       <div class="titulo">Controle de PER/DCOMP</div>
       <div class="esp"></div>
-      <label>Empresa
-        <select id="selEmpresa">
-          <option value="">Todas as empresas</option>
-          ${Object.entries(emps).sort((a, b) => (a[1] || "").localeCompare(b[1] || ""))
-            .map(([k, v]) => `<option value="${esc(k)}" ${k === S.cnpj ? "selected" : ""}>${esc(v)} (${esc(k)})</option>`).join("")}
-        </select>
-      </label>
+      <div class="busca-emp" id="buscaEmp">
+        <label for="empBusca">Empresa</label>
+        ${empSel && !S.trocandoEmp
+          ? `<div class="chip-emp" id="empChip" title="Clique para trocar de empresa">
+               <span class="nome">${esc(empSel.nome)}</span><span class="cnpj">${esc(empSel.cnpj)}</span>
+               <button type="button" id="empLimpar" aria-label="Mostrar todas as empresas" title="Mostrar todas as empresas">×</button></div>`
+          : `<input id="empBusca" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="empSug"
+               placeholder="Todas as empresas: busque por razão social ou CNPJ">`}
+        <div class="sugestoes oculto" id="empSug" role="listbox"></div>
+      </div>
       <span class="usuario">${esc(S.user.email)}</span>
       <a class="link" href="guia.html" target="_blank" rel="noopener" style="font-weight:600;color:var(--azul)">Guia de uso</a>
       <a class="link" href="#senha" style="font-weight:600;color:var(--azul)">Trocar senha</a>
@@ -502,23 +621,27 @@ function render() {
     </header>
     <nav>${views.map(([k, t]) => `<a href="#${k}" class="${S.view === k ? "ativo" : ""}">${t}</a>`).join("")}</nav>
     <main id="conteudo"></main>`;
-  $("#selEmpresa").onchange = e => { S.cnpj = e.target.value; S.creditoSel = null; render(); };
+  ligarBuscaEmpresa();
   $("#btnSair").onclick = async () => { await sb.auth.signOut(); S.user = null; render(); };
   const main = $("#conteudo");
   if (S.aviso) main.insertAdjacentHTML("beforeend", `<div class="msg aviso">${esc(S.aviso)}</div>`);
-  if (S.view === "senha") return telaSenha(false);
+  if (S.view === "senha") return telaSenha("voluntaria");
   ({painel: telaPainel, credito: telaCredito, importar: telaImportar, documentos: telaDocumentos, selic: telaSelic}[S.view] || telaPainel)(main);
 }
 
 // ---------------- Troca de senha ----------------
-function telaSenha(obrigatoria) {
+// modo: "obrigatoria" (primeiro acesso), "voluntaria" (link Trocar senha) ou "recuperacao" (link do e-mail)
+function telaSenha(modo) {
+  const obrigatoria = modo !== "voluntaria";
+  const recuperacao = modo === "recuperacao";
   const html = `
     <form class="login" id="frmSenha" style="${obrigatoria ? "" : "margin-top:10px"}">
       ${obrigatoria ? `<img src="${LOGO}" alt="Irko">` : ""}
-      <h1>${obrigatoria ? "Defina sua senha" : "Trocar senha"}</h1>
-      ${obrigatoria ? `<p class="sub">Primeiro acesso de ${esc(S.user.email)}: troque a senha inicial recebida por uma senha pessoal.</p>` : ""}
+      <h1>${recuperacao ? "Crie uma nova senha" : obrigatoria ? "Defina sua senha" : "Trocar senha"}</h1>
+      ${recuperacao ? `<p class="sub">Recuperação de acesso de ${esc(S.user.email)}.</p>`
+        : obrigatoria ? `<p class="sub">Primeiro acesso de ${esc(S.user.email)}: troque a senha inicial recebida por uma senha pessoal.</p>` : ""}
       <div id="senhaMsg"></div>
-      <label>Senha atual<input type="password" id="sAtual" autocomplete="current-password" required></label>
+      ${recuperacao ? "" : `<label>Senha atual<input type="password" id="sAtual" autocomplete="current-password" required></label>`}
       <label>Nova senha<input type="password" id="sNova" autocomplete="new-password" required></label>
       <label>Confirme a nova senha<input type="password" id="sConf" autocomplete="new-password" required></label>
       <p class="nota">Mínimo de 8 caracteres, com letras e números. Não reutilize senhas de outros sistemas.</p>
@@ -529,25 +652,57 @@ function telaSenha(obrigatoria) {
   if (obrigatoria) $("#app").innerHTML = html;
   else $("#conteudo").insertAdjacentHTML("beforeend", html);
   const erro = m => { $("#senhaMsg").innerHTML = `<div class="msg erro">${esc(m)}</div>`; };
-  if (obrigatoria) $("#sSair").onclick = async () => { await sb.auth.signOut(); S.user = null; S.trocaObrigatoria = false; render(); };
+  if (obrigatoria) $("#sSair").onclick = async () => { await sb.auth.signOut(); S.user = null; S.trocaObrigatoria = false; S.recuperacao = false; render(); };
   else $("#sVoltar").onclick = () => history.back();
   $("#frmSenha").onsubmit = async e => {
     e.preventDefault();
-    const atual = $("#sAtual").value, nova = $("#sNova").value, conf = $("#sConf").value;
+    const atual = recuperacao ? null : $("#sAtual").value, nova = $("#sNova").value, conf = $("#sConf").value;
     if (nova.length < 8 || !/[A-Za-z]/.test(nova) || !/\d/.test(nova)) return erro("A nova senha precisa ter pelo menos 8 caracteres, com letras e números.");
     if (nova !== conf) return erro("A confirmação não confere com a nova senha.");
-    if (nova === atual) return erro("A nova senha precisa ser diferente da atual.");
+    if (!recuperacao && nova === atual) return erro("A nova senha precisa ser diferente da atual.");
     carregando(true);
     try {
-      // confirma a senha atual antes de trocar
-      const r1 = await sb.auth.signInWithPassword({email: S.user.email, password: atual});
-      if (r1.error) return erro("Senha atual incorreta.");
+      // fora da recuperação, confirma a senha atual antes de trocar
+      if (!recuperacao) {
+        const r1 = await sb.auth.signInWithPassword({email: S.user.email, password: atual});
+        if (r1.error) return erro("Senha atual incorreta.");
+      }
       const {data, error} = await sb.auth.updateUser({password: nova, data: {senha_definida: true}});
-      if (error) return erro(/different from the old/i.test(error.message) ? "A nova senha precisa ser diferente da atual." : error.message);
+      if (error) return erro(/different from the old/i.test(error.message) ? "A nova senha precisa ser diferente da anterior." : error.message);
       toast("Senha alterada.");
-      if (obrigatoria) { S.trocaObrigatoria = false; location.hash = "painel"; await entrar(data.user); }
+      if (obrigatoria) { S.trocaObrigatoria = false; S.recuperacao = false; location.hash = "painel"; await entrar(data.user); }
       else { S.user = data.user; location.hash = "painel"; }
     } finally { carregando(false); }
+  };
+}
+
+function telaEsqueci() {
+  $("#app").innerHTML = `
+    <form class="login" id="frmEsqueci">
+      <img src="${LOGO}" alt="Irko">
+      <h1>Esqueci minha senha</h1>
+      <p class="sub">Informe o seu e-mail @irko.com.br. Se ele estiver cadastrado, você receberá um link para criar uma nova senha.</p>
+      <div id="esqMsg"></div>
+      <label>E-mail<input type="email" id="esqEmail" autocomplete="username" required></label>
+      <button class="prim" type="submit">Enviar link</button>
+      <button type="button" class="link" id="esqVoltar">Voltar para o login</button>
+    </form>`;
+  $("#esqVoltar").onclick = () => telaLogin();
+  $("#frmEsqueci").onsubmit = async e => {
+    e.preventDefault();
+    const email = $("#esqEmail").value.trim();
+    if (!/@irko\.com\.br$/i.test(email)) {
+      $("#esqMsg").innerHTML = `<div class="msg erro">Use o seu e-mail @irko.com.br.</div>`;
+      return;
+    }
+    carregando(true);
+    const {error} = await sb.auth.resetPasswordForEmail(email, {redirectTo: location.origin + location.pathname});
+    carregando(false);
+    $("#esqMsg").innerHTML = error && /rate limit|security purposes/i.test(error.message)
+      ? `<div class="msg erro">Muitas solicitações em pouco tempo. Aguarde alguns minutos e tente de novo.</div>`
+      : error ? `<div class="msg erro">${esc(error.message)}</div>`
+      : `<div class="msg ok">Pedido registrado. Se o e-mail estiver cadastrado, o link chega em alguns minutos (verifique também o lixo eletrônico). Ele vale por 1 hora.
+         Se não chegar, peça ao administrador do sistema uma nova senha inicial.</div>`;
   };
 }
 
@@ -578,6 +733,7 @@ function telaLogin(erro) {
       <label>E-mail<input type="email" id="lgEmail" autocomplete="username" required></label>
       <label>Senha<input type="password" id="lgSenha" autocomplete="current-password" required></label>
       <button class="prim" type="submit">Entrar</button>
+      <button type="button" class="link" id="lgEsqueci">Esqueci minha senha</button>
       <p class="nota">Acesso restrito a usuários Irko cadastrados pelo administrador.
         <a href="guia.html" target="_blank" rel="noopener">Veja o guia de uso</a>.</p>
       ${SUPABASE_URL ? "" : `<button type="button" class="link" id="lgCfg">Alterar configuração do Supabase</button>`}
@@ -590,6 +746,7 @@ function telaLogin(erro) {
     if (error) return telaLogin(error.message === "Invalid login credentials" ? "E-mail ou senha inválidos." : error.message);
     await entrar(data.user);
   };
+  $("#lgEsqueci").onclick = () => telaEsqueci();
   const b = $("#lgCfg");
   if (b) b.onclick = () => { localStorage.removeItem("pd_url"); localStorage.removeItem("pd_key"); render(); };
 }
@@ -637,6 +794,7 @@ function telaPainel(main) {
       `<tr><td colspan="5">Total</td><td class="n">${n2(soma("valor_original"))}</td><td class="n">${n2(soma("total_utilizado"))}</td>
         <td class="n">${n2(soma("saldo_original"))}</td><td></td><td class="n">${n2(soma("saldo_atualizado"))}</td><td colspan="2"></td></tr>`)
       + `<p class="nota">Clique em um crédito para abrir o extrato.</p>`
+    : S.cnpj ? `<div class="msg info">Nenhum crédito ${so ? "com saldo " : ""}para a empresa selecionada.</div>`
     : `<div class="msg info">Nenhum crédito cadastrado. Importe os PDFs em <a href="#importar">Importar PER/DCOMP</a>.</div>`}`);
   $("#dataPos").onchange = e => { S.dataPos = e.target.value || hojeISO(); render(); };
   $("#soSaldo").onchange = e => { S.soSaldo = e.target.checked; render(); };
@@ -648,7 +806,9 @@ function telaPainel(main) {
 async function telaCredito(main) {
   const lista = creditos();
   if (!lista.length) {
-    main.insertAdjacentHTML("beforeend", `<h1>Extrato do crédito</h1><div class="msg info">Nenhum crédito cadastrado.</div>`);
+    main.insertAdjacentHTML("beforeend", `<h1>Extrato do crédito</h1><div class="msg info">${S.cnpj
+      ? "Nenhum crédito para a empresa selecionada. Clique no × ao lado do nome da empresa, no topo, para ver todas."
+      : "Nenhum crédito cadastrado."}</div>`);
     return;
   }
   if (!lista.find(c => c.numero === S.creditoSel)) S.creditoSel = lista[0].numero;
@@ -858,7 +1018,7 @@ function telaDocumentos(main) {
   main.insertAdjacentHTML("beforeend", `
     <h1>Documentos importados</h1>
     <p class="sub">Altere status e observação e clique em Salvar na linha. Documentos com status Retificado ou Cancelado deixam de abater o saldo.</p>
-    <div class="barra"><label style="flex:1">Filtrar<input id="filtro" placeholder="Número, empresa, tipo..." value="${esc(S.filtroDocs || "")}"></label></div>
+    <div class="barra"><label style="flex:1">Filtrar<input id="filtro" placeholder="Número do PER/DCOMP, tipo de documento ou de crédito..." value="${esc(S.filtroDocs || "")}"></label></div>
     ${docs.length ? tabela([{t:"Número"},{t:"Empresa"},{t:"Documento"},{t:"Tipo de crédito"},{t:"Transmissão"},{t:"PER/DCOMP inicial"},
       {t:"Débitos",n:1},{t:"Utilizado",n:1},{t:"Status"},{t:"Observação"},{t:"Importado por"},{t:""}],
       docs.map(d => `<tr data-busca="${esc((d.numero + " " + d.nome_empresa + " " + d.tipo_documento + " " + d.tipo_credito + " " + (d.numero_inicial || "")).toLowerCase())}">
@@ -1047,13 +1207,28 @@ async function entrar(user) {
 async function iniciar() {
   const c = cfg();
   if (!c.url || !c.key) return render();
+  // link de recuperação de senha enviado por e-mail (#access_token=...&type=recovery) ou link inválido (#error=...)
+  const retorno = new URLSearchParams(location.hash.slice(1));
+  const viaRecuperacao = retorno.get("type") === "recovery";
+  const erroLink = retorno.get("error_code") || retorno.get("error");
   sb = supabase.createClient(c.url, c.key);
+  sb.auth.onAuthStateChange((evento, sessao) => {
+    if (evento === "PASSWORD_RECOVERY" && sessao) { S.recuperacao = true; S.user = sessao.user; render(); }
+  });
   const {data} = await sb.auth.getSession();
+  if (location.hash.includes("=")) history.replaceState(null, "", location.pathname + "#painel");
+  if (erroLink && !data.session) return telaLogin(/expired/i.test(erroLink)
+    ? "O link de recuperação expirou ou já foi usado. Peça um novo em Esqueci minha senha."
+    : "Link inválido. Peça um novo em Esqueci minha senha.");
+  if (data.session && viaRecuperacao) { S.recuperacao = true; S.user = data.session.user; return render(); }
   if (data.session) await entrar(data.session.user); else render();
 }
 
-window.addEventListener("hashchange", () => { S.view = location.hash.slice(1) || "painel"; if (S.user) render(); });
-S.view = location.hash.slice(1) || "painel";
+window.addEventListener("hashchange", () => {
+  if (location.hash.includes("=")) return;   // retorno de autenticação, tratado em iniciar()
+  S.view = location.hash.slice(1) || "painel"; if (S.user) render();
+});
+S.view = location.hash.includes("=") ? "painel" : (location.hash.slice(1) || "painel");
 iniciar();
 </script>
 </body>
