@@ -1190,6 +1190,7 @@ function gruposConsolidado(lista) {
   const soma = (cs, f) => r2(cs.reduce((s, c) => s + (c[f] || 0), 0));
   return [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome)).map(g => ({...g,
     valor: soma(g.creditos, "valor_original"), utilizado: soma(g.creditos, "total_utilizado"),
+    compensado: soma(g.creditos, "total_compensado"),
     saldo: soma(g.creditos, "saldo_original"), atualizado: soma(g.creditos, "saldo_atualizado")}));
 }
 
@@ -1270,15 +1271,16 @@ function desenharConsolidado() {
   const grupos = gruposConsolidado(lista);
   const tot = f => r2(grupos.reduce((s, g) => s + g[f], 0));
   const cols = [{t:"Tipo de crédito"},{t:"Cód. receita"},{t:"Período / PA"},{t:"PER/DCOMP de origem"},{t:"Início Selic"},
-    {t:"Valor original",n:1},{t:"Utilizado",n:1},{t:"Saldo original",n:1},{t:"Selic acum.",n:1},{t:"Saldo atualizado",n:1}];
+    {t:"Valor original",n:1},{t:"Utilizado",n:1},{t:"Débitos compensados",n:1},{t:"Saldo original",n:1},{t:"Selic acum.",n:1},{t:"Saldo atualizado",n:1}];
   const linhas = grupos.flatMap(g => [
-    `<tr class="grupo-emp"><td colspan="10">${esc(g.nome)} · CNPJ ${esc(g.cnpj)} · ${g.creditos.length} crédito(s)</td></tr>`,
+    `<tr class="grupo-emp"><td colspan="11">${esc(g.nome)} · CNPJ ${esc(g.cnpj)} · ${g.creditos.length} crédito(s)</td></tr>`,
     ...g.creditos.map(c => `<tr class="clic" data-num="${esc(c.numero)}" data-cnpj="${esc(c.cnpj)}">
       <td>${esc(c.tipo_credito)}</td><td>${esc(codigoTxt(c))}</td><td>${esc(periodoTxt(c))}</td><td>${esc(c.numero)}</td>
       <td>${mesAno(c.selic_inicio)}</td><td class="n">${n2(c.valor_original)}</td><td class="n">${n2(c.total_utilizado)}</td>
+      <td class="n">${n2(c.total_compensado)}</td>
       <td class="n">${n2(c.saldo_original)}</td><td class="n">${pct(c.selic_hoje)}</td><td class="n">${n2(c.saldo_atualizado)}</td></tr>`),
     `<tr class="subtotal"><td colspan="5">Subtotal ${esc(g.nome)}</td><td class="n">${n2(g.valor)}</td><td class="n">${n2(g.utilizado)}</td>
-      <td class="n">${n2(g.saldo)}</td><td></td><td class="n">${n2(g.atualizado)}</td></tr>`]);
+      <td class="n">${n2(g.compensado)}</td><td class="n">${n2(g.saldo)}</td><td></td><td class="n">${n2(g.atualizado)}</td></tr>`]);
   box.innerHTML = cards([
       ["Empresas", String(grupos.length)],
       ["Valor original dos créditos", brl(tot("valor"))],
@@ -1287,7 +1289,7 @@ function desenharConsolidado() {
       [`Saldo atualizado em ${dt(S.dataPos)}`, brl(tot("atualizado")), true]])
     + tabela(cols, linhas,
       `<tr><td colspan="5">Total consolidado (${grupos.length} empresa(s))</td><td class="n">${n2(tot("valor"))}</td><td class="n">${n2(tot("utilizado"))}</td>
-        <td class="n">${n2(tot("saldo"))}</td><td></td><td class="n">${n2(tot("atualizado"))}</td></tr>`)
+        <td class="n">${n2(tot("compensado"))}</td><td class="n">${n2(tot("saldo"))}</td><td></td><td class="n">${n2(tot("atualizado"))}</td></tr>`)
     + `<p class="nota">Clique em um crédito para abrir o extrato dele.</p>`;
   box.querySelectorAll("tr.clic").forEach(tr => tr.onclick = () => {
     S.cnpj = tr.dataset.cnpj; S.creditoSel = tr.dataset.num; location.hash = "credito";
@@ -1331,27 +1333,27 @@ async function exportarConsolidado(lista) {
     res.getCell("A1").font = {bold: true, size: 14, color: {argb: AZUL}};
     res.getCell("A2").value = `Posição em ${dt(S.dataPos)} · ${grupos.length} empresa(s)${S.consSoSaldo ? " · somente créditos com saldo" : ""}`;
     const COLS = ["Tipo de crédito","Cód. receita","Período / PA","PER/DCOMP de origem","Status","Início Selic",
-                  "Valor original","Crédito original utilizado","Saldo original","Selic acumulada","Saldo atualizado"];
-    const FMT = [, , , , , , MOEDA, MOEDA, MOEDA, PCT, MOEDA];
+                  "Valor original","Crédito original utilizado","Débitos compensados","Saldo original","Selic acumulada","Saldo atualizado"];
+    const FMT = [, , , , , , MOEDA, MOEDA, MOEDA, MOEDA, PCT, MOEDA];
     let r = 4;
     const subtotais = [];
     for (const g of grupos) {
       const t = res.getRow(r);
-      res.mergeCells(r, 1, r, 9);
+      res.mergeCells(r, 1, r, 10);
       t.getCell(1).value = `${g.nome}  ·  CNPJ ${g.cnpj}  ·  ${g.creditos.length} crédito(s)`;
       t.getCell(1).font = {bold: true, size: 12, color: {argb: "FF1F2430"}};
       t.getCell(1).fill = {type: "pattern", pattern: "solid", fgColor: {argb: AZUL_CLARO}};
-      res.mergeCells(r, 10, r, 11);
-      botao(t.getCell(10), "Ver composição ›", g.aba);
+      res.mergeCells(r, 11, r, 12);
+      botao(t.getCell(11), "Ver composição ›", g.aba);
       t.height = 22;
       r++;
       cab(res, r, COLS); r++;
       const ini = r;
       for (const c of g.creditos) lin(res, r++, [c.tipo_credito, codigoTxt(c), periodoTxt(c), c.numero, c.status, mesAno(c.selic_inicio),
-        c.valor_original, c.total_utilizado, c.saldo_original, c.selic_hoje, c.saldo_atualizado], FMT);
+        c.valor_original, c.total_utilizado, c.total_compensado, c.saldo_original, c.selic_hoje, c.saldo_atualizado], FMT);
       const sub = res.getRow(r);
       sub.getCell(1).value = `Subtotal ${g.nome}`;
-      for (const col of ["G", "H", "I", "K"]) { const c = res.getCell(`${col}${r}`); c.value = {formula: `SUM(${col}${ini}:${col}${r - 1})`}; c.numFmt = MOEDA; }
+      for (const col of ["G", "H", "I", "J", "L"]) { const c = res.getCell(`${col}${r}`); c.value = {formula: `SUM(${col}${ini}:${col}${r - 1})`}; c.numFmt = MOEDA; }
       sub.font = {bold: true};
       sub.eachCell(c => c.border = {top: {style: "thin", color: {argb: AZUL}}});
       subtotais.push(r);
@@ -1359,13 +1361,13 @@ async function exportarConsolidado(lista) {
     }
     const tt = res.getRow(r);
     tt.getCell(1).value = `Total consolidado (${grupos.length} empresa(s))`;
-    for (const col of ["G", "H", "I", "K"]) {
+    for (const col of ["G", "H", "I", "J", "L"]) {
       const c = res.getCell(`${col}${r}`); c.value = {formula: subtotais.map(s => `${col}${s}`).join("+")}; c.numFmt = MOEDA;
     }
     tt.font = {bold: true, size: 12, color: {argb: "FFFFFFFF"}};
     tt.eachCell(c => c.fill = {type: "pattern", pattern: "solid", fgColor: {argb: AZUL}});
-    for (let col = 1; col <= 11; col++) { const c = tt.getCell(col); if (!c.fill) c.fill = {type: "pattern", pattern: "solid", fgColor: {argb: AZUL}}; }
-    [30, 12, 22, 34, 14, 11, 16, 16, 16, 11, 16].forEach((w, i) => res.getColumn(i + 1).width = w);
+    for (let col = 1; col <= 12; col++) { const c = tt.getCell(col); if (!c.fill) c.fill = {type: "pattern", pattern: "solid", fgColor: {argb: AZUL}}; }
+    [30, 12, 22, 34, 14, 11, 16, 16, 16, 16, 11, 16].forEach((w, i) => res.getColumn(i + 1).width = w);
     res.views = [{state: "frozen", ySplit: 2}];
 
     // ---- Uma aba por empresa com a composição ----
@@ -1382,9 +1384,9 @@ async function exportarConsolidado(lista) {
       cab(ws, r, COLS); r++;
       const ini = r;
       for (const c of g.creditos) lin(ws, r++, [c.tipo_credito, codigoTxt(c), periodoTxt(c), c.numero, c.status, mesAno(c.selic_inicio),
-        c.valor_original, c.total_utilizado, c.saldo_original, c.selic_hoje, c.saldo_atualizado], FMT);
+        c.valor_original, c.total_utilizado, c.total_compensado, c.saldo_original, c.selic_hoje, c.saldo_atualizado], FMT);
       ws.getCell(r, 1).value = "Total"; ws.getRow(r).font = {bold: true};
-      for (const col of ["G", "H", "I", "K"]) { const c = ws.getCell(`${col}${r}`); c.value = {formula: `SUM(${col}${ini}:${col}${r - 1})`}; c.numFmt = MOEDA; }
+      for (const col of ["G", "H", "I", "J", "L"]) { const c = ws.getCell(`${col}${r}`); c.value = {formula: `SUM(${col}${ini}:${col}${r - 1})`}; c.numFmt = MOEDA; }
       r += 2;
 
       for (const c of g.creditos) {
