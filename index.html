@@ -1,0 +1,1011 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controle PER/DCOMP | Irko</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+:root{
+  --azul:#61729F; --azul-esc:#4B5A82; --azul-claro:#E8EBF3; --laranja:#F58547;
+  --texto:#1F2430; --texto2:#5B6170; --linha:#D9DCE3; --fundo:#FFFFFF; --fundo2:#F4F5F8;
+  --ok:#2E7D4F; --erro:#B3261E; --aviso-bg:#FFF4EC; --erro-bg:#FDECEA; --ok-bg:#EAF5EE;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Calibri,"Segoe UI",Arial,sans-serif;font-size:14px;color:var(--texto);background:var(--fundo2)}
+header{background:var(--fundo);border-bottom:1px solid var(--linha);padding:10px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+header img{height:34px}
+header .titulo{font-size:18px;font-weight:600;color:var(--azul)}
+header .esp{flex:1}
+header .usuario{color:var(--texto2);font-size:13px}
+nav{background:var(--azul);padding:0 24px;display:flex;gap:4px;flex-wrap:wrap}
+nav a{color:#fff;text-decoration:none;padding:11px 16px;font-weight:600;opacity:.85;border-bottom:3px solid transparent}
+nav a:hover{opacity:1}
+nav a.ativo{opacity:1;border-bottom-color:var(--laranja)}
+main{padding:24px;max-width:1500px;margin:0 auto}
+h1{font-size:24px;color:var(--azul);margin:0 0 4px}
+h2{font-size:17px;color:var(--azul);margin:24px 0 10px}
+.sub{color:var(--texto2);margin:0 0 18px}
+.barra{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px}
+label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--texto2);font-weight:600}
+label.inline{flex-direction:row;align-items:center;gap:6px;font-weight:400;font-size:14px;color:var(--texto)}
+input,select,textarea{font:inherit;padding:7px 9px;border:1px solid var(--linha);border-radius:6px;background:#fff;color:var(--texto)}
+textarea{min-height:60px}
+button{font:inherit;font-weight:600;padding:8px 16px;border-radius:6px;border:1px solid var(--azul);background:#fff;color:var(--azul);cursor:pointer}
+button:hover{background:var(--azul-claro)}
+button.prim{background:var(--azul);color:#fff}
+button.prim:hover{background:var(--azul-esc)}
+button.perigo{border-color:var(--erro);color:var(--erro)}
+button.link{border:none;background:none;padding:2px 6px;color:var(--azul);text-decoration:underline}
+button:disabled{opacity:.5;cursor:not-allowed}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:18px}
+.card{background:#fff;border:1px solid var(--linha);border-radius:8px;padding:14px 16px}
+.card .rot{font-size:12px;color:var(--texto2)}
+.card .val{font-size:22px;font-weight:600;margin-top:4px}
+.card.destaque .val{color:var(--laranja)}
+.caixa{background:#fff;border:1px solid var(--linha);border-radius:8px;padding:16px;margin-bottom:16px}
+.tabela-wrap{overflow-x:auto;background:#fff;border:1px solid var(--linha);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{background:var(--azul);color:#fff;text-align:left;padding:8px 10px;white-space:nowrap;font-weight:600;position:sticky;top:0}
+td{padding:7px 10px;border-top:1px solid var(--linha);vertical-align:top}
+tr:nth-child(even) td{background:var(--fundo2)}
+td.n,th.n{text-align:right;white-space:nowrap}
+tfoot td{font-weight:700;background:var(--azul-claro)!important}
+tr.clic{cursor:pointer}
+tr.clic:hover td{background:var(--azul-claro)}
+.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600}
+.tag.ok{background:var(--ok-bg);color:var(--ok)}
+.tag.alerta{background:var(--aviso-bg);color:#A4501C}
+.tag.erro{background:var(--erro-bg);color:var(--erro)}
+.msg{padding:10px 14px;border-radius:6px;margin-bottom:12px;border-left:4px solid}
+.msg.aviso{background:var(--aviso-bg);border-color:var(--laranja)}
+.msg.erro{background:var(--erro-bg);border-color:var(--erro)}
+.msg.ok{background:var(--ok-bg);border-color:var(--ok)}
+.msg.info{background:var(--azul-claro);border-color:var(--azul)}
+.abas{display:flex;gap:2px;border-bottom:1px solid var(--linha);margin:18px 0 14px;flex-wrap:wrap}
+.abas button{border:none;border-bottom:3px solid transparent;border-radius:0;background:none;color:var(--texto2);padding:8px 14px}
+.abas button.ativo{color:var(--azul);border-bottom-color:var(--laranja)}
+.drop{border:2px dashed var(--azul);border-radius:8px;background:#fff;padding:30px;text-align:center;color:var(--texto2);cursor:pointer}
+.drop.sobre{background:var(--azul-claro)}
+.nota{font-size:12px;color:var(--texto2);margin-top:8px}
+.login{max-width:380px;margin:60px auto;background:#fff;border:1px solid var(--linha);border-radius:10px;padding:28px;display:flex;flex-direction:column;gap:14px}
+.login img{height:40px;align-self:center}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.oculto{display:none!important}
+#carregando{position:fixed;inset:0;background:rgba(255,255,255,.6);display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--azul);z-index:10}
+@media (max-width:700px){main{padding:14px}header{padding:10px 14px}nav{padding:0 8px}}
+</style>
+</head>
+<body>
+<div id="carregando" class="oculto">Processando...</div>
+<div id="app"></div>
+
+<script>
+// =====================================================================
+// CONFIGURAÇÃO: preencha com os dados do projeto Supabase da Irko
+// (Project Settings > API). A chave "anon" é pública por definição;
+// a proteção dos dados é feita pelo login e pelas regras RLS do banco.
+// Se ficarem vazios, o sistema pede os dados na primeira abertura.
+// =====================================================================
+const SUPABASE_URL = "https://mqhgifzsafcrpifrgcjd.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_y8ziziRLxyvhmxJyPMeBaA_p7_wJs6r";
+
+const BUCKET = "perdcomp-pdfs";
+const LOGO = "https://site.irko.com.br/wp-content/uploads/2023/02/Irko_marca-color-300x60.png";
+const STATUS_DOC = ["Transmitido","Em análise","Homologado","Homologado parcialmente","Não homologado",
+                    "Deferido","Indeferido","Retificado","Cancelado"];
+const STATUS_EXCLUIDOS = new Set(["Retificado","Cancelado"]);
+const TOL = 0.02;
+
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+// ---------------------------------------------------------------------
+// Utilitários
+// ---------------------------------------------------------------------
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const r2 = v => Math.round((Number(v) + Number.EPSILON) * 100) / 100;
+const num = v => v == null || v === "" ? null : Number(v);
+const brl = v => v == null || isNaN(v) ? "-" : Number(v).toLocaleString("pt-BR", {style:"currency", currency:"BRL"});
+const n2 = v => v == null || isNaN(v) ? "-" : Number(v).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2});
+const pct = v => v == null || isNaN(v) ? "-" : n2(v) + "%";
+const dt = iso => iso ? String(iso).slice(0,10).split("-").reverse().join("/") : "";
+const mesAno = ym => ym ? ym.slice(5) + "/" + ym.slice(0,4) : "-";
+const hojeISO = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
+function carregando(on){ $("#carregando").classList.toggle("oculto", !on); }
+
+// =====================================================================
+// LEITURA DO PDF DO PER/DCOMP
+// =====================================================================
+const PD = (() => {
+  const NUM = String.raw`\d{5}\.\d{5}\.\d{6}\.\d\.\d\.\d{2}-\d{4}`;
+  const MESES = {janeiro:1,fevereiro:2,"março":3,marco:3,abril:4,maio:5,junho:6,julho:7,agosto:8,setembro:9,outubro:10,novembro:11,dezembro:12};
+  const reEsc = s => s.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&");
+
+  async function textoPaginas(buf) {
+    const pdf = await pdfjsLib.getDocument({data: new Uint8Array(buf)}).promise;
+    const paginas = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const tc = await page.getTextContent();
+      const linhas = [];
+      for (const it of tc.items) {
+        if (!it.str) continue;
+        const y = it.transform[5], x = it.transform[4];
+        let l = linhas.find(l => Math.abs(l.y - y) < 2.5);
+        if (!l) { l = {y, itens: []}; linhas.push(l); }
+        l.itens.push({x, w: it.width, s: it.str});
+      }
+      linhas.sort((a, b) => b.y - a.y);
+      paginas.push(linhas.map(l => {
+        l.itens.sort((a, b) => a.x - b.x);
+        let out = "", fim = null;
+        for (const it of l.itens) {
+          if (fim !== null && it.x - fim > 0.8 && !out.endsWith(" ") && !it.s.startsWith(" ")) out += " ";
+          out += it.s; fim = it.x + it.w;
+        }
+        return out.replace(/\s+/g, " ").trim();
+      }).filter(Boolean).join("\n"));
+    }
+    return paginas;
+  }
+
+  const brNum = s => {
+    if (s == null) return null;
+    s = String(s).replace(/R\$|\s|%/g, "");
+    if (!s) return null;
+    const v = Number(s.replace(/\./g, "").replace(",", "."));
+    return isNaN(v) ? null : v;
+  };
+  const brData = s => {
+    const m = s && s.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+  };
+  const campo = (t, rot) => {
+    const m = t.match(new RegExp("^" + reEsc(rot) + "[ \\t]+(.+)$", "m"));
+    return m ? m[1].trim() : null;
+  };
+  function periodo(s) {
+    s = (s || "").trim();
+    let m;
+    if (/^\d{2}\/\d{4}$/.test(s)) return s;
+    if ((m = s.match(/^(\S+) de (\d{4})$/i)) && MESES[m[1].toLowerCase()]) return String(MESES[m[1].toLowerCase()]).padStart(2,"0") + "/" + m[2];
+    if ((m = s.match(/^\d{2}\/(\d{2})\/(\d{4})$/))) return m[1] + "/" + m[2];
+    return s;
+  }
+  function limpar(paginas) {
+    return paginas.map(t => {
+      const ls = t.split("\n");
+      return ls.filter((l, i) => {
+        const s = l.trim();
+        if (s.startsWith("Receita Federal do Brasil") || s.startsWith("PEDIDO DE RESTITUIÇÃO")) return false;
+        if (new RegExp(`^CNPJ [\\d./-]+ ${NUM}$`).test(s)) return false;
+        if (i === ls.length - 1 && /^\d+$/.test(s)) return false;
+        return true;
+      }).join("\n");
+    }).join("\n");
+  }
+  function debitos(t) {
+    const heads = [...t.matchAll(/^(\d{3})\. Débito (.+)$/gm)];
+    return heads.map((h, i) => {
+      let blk = t.slice(h.index + h[0].length, i + 1 < heads.length ? heads[i + 1].index : t.length);
+      const tot = blk.search(/^TOTAL\s/m);
+      if (tot >= 0) blk = blk.slice(0, tot);
+      const d = {seq: Number(h[1]), grupo: h[2].trim(), codigo_receita: "", denominacao: ""};
+      const mc = blk.match(/^Código da Receita\/Denominação\s+([\s\S]+?)\n(?=Débito Controlado|Período)/m);
+      const cod = mc ? mc[1].split(/\s+/).join(" ") : null;
+      if (cod) {
+        const m = cod.match(/^(\d{4}-\d{2})\s*-\s*(.*)$/);
+        if (m) { d.codigo_receita = m[1]; d.denominacao = m[2].trim(); } else d.denominacao = cod;
+      }
+      d.periodo_apuracao = periodo(campo(blk, "Período Apuração DCTFWeb") || campo(blk, "Período de Apuração") || "");
+      d.vencimento = brData(campo(blk, "Data de Vencimento do Tributo/Quota"));
+      d.principal = brNum(campo(blk, "Principal")) || 0;
+      d.multa = brNum(campo(blk, "Multa")) || 0;
+      d.juros = brNum(campo(blk, "Juros")) || 0;
+      d.total = brNum(campo(blk, "Total")) ?? r2(d.principal + d.multa + d.juros);
+      return d;
+    });
+  }
+  function interpretar(paginas) {
+    const raw = paginas.join("\n");
+    const m = raw.match(new RegExp(`CNPJ ([\\d./-]+) (${NUM})`));
+    if (!m) throw new Error("Número do PER/DCOMP não encontrado. O arquivo não parece ser um PER/DCOMP.");
+    const t = limpar(paginas);
+    const doc = {numero: m[2], cnpj: m[1], avisos: []};
+    doc.nome_empresa = campo(t, "Nome Empresarial") || "";
+    doc.tipo_documento = campo(t, "Tipo de Documento") || "";
+    doc.tipo_credito = campo(t, "Tipo de Crédito") || "";
+    doc.data_transmissao = brData(campo(t, "Data de Transmissão"));
+    doc.retificador = /^sim/i.test(campo(t, "PER/DCOMP Retificador") || "");
+    doc.numero_retificado = null;
+    if (doc.retificador) {
+      const r = t.match(new RegExp(`Retificad[oa]\\D{0,40}(${NUM})`));
+      doc.numero_retificado = r ? r[1] : null;
+      if (!r) doc.avisos.push("Documento retificador sem número do retificado identificado.");
+    }
+    doc.informado_outro = /^sim/i.test(campo(t, "Informado em Outro PER/DCOMP") || "");
+    const ini = t.match(new RegExp(`Nº do PER/DCOMP Inicial\\s+(${NUM})`));
+    doc.numero_inicial = ini ? ini[1] : null;
+    doc.exercicio = campo(t, "Exercício");
+    doc.forma_apuracao = campo(t, "Forma de Apuração");
+    doc.periodo_ini = brData(campo(t, "Data Inicial do Período"));
+    doc.periodo_fim = brData(campo(t, "Data Final do Período"));
+    doc.data_arrecadacao = brData(campo(t, "Data de Arrecadação"));
+    doc.selic_pdf = brNum(campo(t, "Selic Acumulada"));
+    doc.valor_saldo_negativo = brNum(campo(t, "Valor do Saldo Negativo"));
+    doc.credito_original_entrega = brNum(campo(t, "Crédito Original na Data da Entrega"))
+      ?? brNum(campo(t, "Valor Original do Crédito Inicial")) ?? brNum(campo(t, "Valor Original do Crédito"));
+    doc.credito_atualizado = brNum(campo(t, "Crédito Atualizado"));
+    doc.total_debitos = brNum(campo(t, "Total dos débitos desta DCOMP"));
+    doc.credito_utilizado = brNum(campo(t, "Total do Crédito Original Utilizado nesta DCOMP"));
+    doc.saldo_credito_original = brNum(campo(t, "Saldo do Crédito Original"));
+    doc.valor_pedido = brNum(campo(t, "Valor do Pedido de Restituição") || campo(t, "Valor do Pedido de Ressarcimento")
+                             || campo(t, "Valor do Pedido de Reembolso"));
+    doc.debitos = [];
+    if (/compensa/i.test(doc.tipo_documento)) {
+      doc.debitos = debitos(t);
+      const soma = r2(doc.debitos.reduce((s, d) => s + d.total, 0));
+      if (doc.total_debitos == null && doc.debitos.length) doc.total_debitos = soma;
+      if (doc.total_debitos != null && Math.abs(soma - doc.total_debitos) > 0.01)
+        doc.avisos.push(`Soma dos débitos lidos (${n2(soma)}) difere do total da DCOMP (${n2(doc.total_debitos)}).`);
+    }
+    if (doc.credito_original_entrega == null && doc.valor_pedido == null)
+      doc.avisos.push("Valor do crédito original não identificado no PDF. Informe na tela do crédito.");
+    return doc;
+  }
+  async function lerPdf(buf) { return interpretar(await textoPaginas(buf)); }
+  return {lerPdf, interpretar, textoPaginas};
+})();
+
+// =====================================================================
+// CÁLCULO: créditos, conta-corrente e Selic
+//   Selic acumulada na data D = soma das taxas mensais do mês de início
+//   até o mês anterior ao de D + 1% no mês de D.
+//   Crédito original utilizado = débitos / (1 + Selic acumulada).
+// =====================================================================
+const Calc = (() => {
+  const idx = ym => { const [y, m] = ym.split("-").map(Number); return y * 12 + m - 1; };
+  const ym = k => `${Math.floor(k / 12)}-${String(k % 12 + 1).padStart(2, "0")}`;
+
+  function selicAcumulada(inicio, dataRef, tab) {
+    if (!inicio || !dataRef) return {v: null, faltam: []};
+    const ini = idx(inicio), ref = idx(dataRef.slice(0, 7));
+    if (ref < ini) return {v: 0, faltam: []};
+    let soma = 0; const faltam = [];
+    for (let k = ini; k < ref; k++) { const c = ym(k); if (c in tab) soma += tab[c]; else faltam.push(c); }
+    return {v: r2(soma + 1), faltam};
+  }
+
+  // Saldo negativo: mês seguinte ao encerramento do período. Pagamento indevido: mês seguinte ao pagamento.
+  function inicioPadrao(d) {
+    const tc = (d.tipo_credito || "").toLowerCase();
+    let base = null;
+    if (tc.includes("saldo negativo") && d.periodo_fim) base = d.periodo_fim;
+    else if ((tc.includes("indevido") || tc.includes("a maior")) && d.data_arrecadacao) base = d.data_arrecadacao;
+    return base ? ym(idx(base.slice(0, 7)) + 1) : null;
+  }
+
+  function montar(docs, params, ajustes, tab, dataPos) {
+    const porNum = Object.fromEntries(docs.map(d => [d.numero, d]));
+    const raiz = d => {
+      const vistos = new Set(); let cur = d;
+      while (cur.numero_inicial && !vistos.has(cur.numero)) {
+        vistos.add(cur.numero);
+        const nx = porNum[cur.numero_inicial];
+        if (!nx) return cur.numero_inicial;
+        cur = nx;
+      }
+      return cur.numero;
+    };
+    const grupos = {};
+    for (const d of docs) (grupos[raiz(d)] ||= []).push(d);
+
+    const lista = [];
+    for (const [numero, gdocs] of Object.entries(grupos)) {
+      const origem = porNum[numero];
+      const ref = origem || [...gdocs].sort((a, b) =>
+        (a.data_transmissao || "").localeCompare(b.data_transmissao || "") || (num(b.credito_original_entrega) || 0) - (num(a.credito_original_entrega) || 0))[0];
+      const p = params[numero] || {};
+      let padrao = null;
+      for (const d of [ref, ...gdocs]) { padrao = inicioPadrao(d); if (padrao) break; }
+      const avisos = [];
+      let valorPdf;
+      if (origem) valorPdf = num(origem.credito_original_entrega) ?? num(origem.valor_pedido) ?? num(origem.valor_saldo_negativo);
+      else {
+        valorPdf = num(ref.credito_original_entrega);
+        avisos.push(`PER/DCOMP de origem ${numero} não importado. Valor inicial assumido a partir da DCOMP ${ref.numero}; importe o documento de origem para conferência completa.`);
+      }
+      const valor = p.valor_credito != null ? num(p.valor_credito) : (valorPdf || 0);
+      const selicIni = p.selic_inicio || padrao;
+      if (!selicIni) avisos.push("Mês de início da Selic não definido para este tipo de crédito. Defina na tela do crédito.");
+      const c = {
+        numero, cnpj: ref.cnpj, nome_empresa: ref.nome_empresa, tipo_credito: ref.tipo_credito,
+        tipo_documento: origem ? origem.tipo_documento : "(não importado)",
+        data_transmissao: origem ? origem.data_transmissao : null,
+        periodo: ref.periodo_ini && ref.periodo_fim ? `${dt(ref.periodo_ini)} a ${dt(ref.periodo_fim)}` : "",
+        valor_original: r2(valor), selic_inicio: selicIni, selic_inicio_padrao: padrao,
+        observacao: p.observacao || "", status: origem ? origem.status : "", avisos, movimentos: [],
+        total_utilizado: 0, total_compensado: 0,
+      };
+      contaCorrente(c, gdocs, ajustes.filter(a => a.numero_credito === numero), tab, dataPos);
+      lista.push(c);
+    }
+    lista.sort((a, b) => (a.nome_empresa || "").localeCompare(b.nome_empresa || "") ||
+      (a.tipo_credito || "").localeCompare(b.tipo_credito || "") || a.periodo.localeCompare(b.periodo));
+    return lista;
+  }
+
+  function contaCorrente(c, docs, ajustes, tab, dataPos) {
+    const ev = [];
+    for (const d of docs) {
+      if (!/compensa/i.test(d.tipo_documento || "")) continue;
+      ev.push({data: d.data_transmissao || "9999-12-31", ord: 0, k: -(num(d.credito_original_entrega) || 0), id: d.numero, tipo: "D", d});
+    }
+    for (const a of ajustes) ev.push({data: a.data, ord: 1, k: 0, id: String(a.id), tipo: "A", d: a});
+    // no mesmo dia, a DCOMP com maior saldo na entrega foi transmitida antes
+    ev.sort((x, y) => x.data.localeCompare(y.data) || x.ord - y.ord || x.k - y.k || x.id.localeCompare(y.id));
+
+    let saldo = c.valor_original;
+    const faltasTot = new Set();
+    for (const e of ev) {
+      const d = e.d;
+      if (e.tipo === "A") {
+        const v = r2(num(d.valor_original));
+        c.movimentos.push({data: e.data, tipo: "Ajuste", numero: d.descricao || "Ajuste manual", status: "",
+          saldo_antes: saldo, selic: null, selic_pdf: null, total_debitos: 0, utilizado: v, juros: 0,
+          saldo_depois: r2(saldo - v), divergencias: [], ajuste_id: d.id});
+        saldo = r2(saldo - v);
+        continue;
+      }
+      const excl = STATUS_EXCLUIDOS.has(d.status);
+      const {v: selCalc, faltam} = selicAcumulada(c.selic_inicio, d.data_transmissao, tab);
+      faltam.forEach(f => faltasTot.add(f));
+      const total = num(d.total_debitos) || 0;
+      const sel = selCalc ?? num(d.selic_pdf) ?? 0;
+      const fator = 1 + sel / 100;
+      const utilCalc = excl ? 0 : r2(Math.min(total / fator, saldo));
+      let util = num(d.credito_utilizado) ?? utilCalc;
+      if (excl) util = 0;
+      const juros = util ? r2(Math.min(total, util * fator) - util) : 0;
+      const div = [];
+      if (!excl) {
+        if (faltam.length) div.push(`Selic sem taxa cadastrada para: ${faltam.map(mesAno).join(", ")}`);
+        if (selCalc != null && d.selic_pdf != null && Math.abs(selCalc - num(d.selic_pdf)) > 0.005)
+          div.push(`Selic do PDF ${pct(d.selic_pdf)} x calculada ${pct(selCalc)}`);
+        if (d.credito_original_entrega != null && Math.abs(num(d.credito_original_entrega) - saldo) > TOL)
+          div.push(`Saldo informado na DCOMP (${n2(d.credito_original_entrega)}) difere do saldo controlado (${n2(saldo)})`);
+        if (d.credito_utilizado != null && Math.abs(num(d.credito_utilizado) - utilCalc) > TOL)
+          div.push(`Crédito utilizado no PDF (${n2(d.credito_utilizado)}) x calculado (${n2(utilCalc)})`);
+        if (util > saldo + TOL) div.push("Utilização maior que o saldo disponível");
+      }
+      const novo = r2(saldo - util);
+      c.movimentos.push({data: d.data_transmissao, tipo: "DCOMP", numero: d.numero, status: d.status, documento_id: d.id,
+        saldo_antes: saldo, selic: selCalc ?? num(d.selic_pdf), selic_pdf: num(d.selic_pdf),
+        total_debitos: excl ? 0 : total, utilizado: util, juros, saldo_depois: novo, divergencias: div});
+      if (!excl) { c.total_utilizado += util; c.total_compensado += total; }
+      saldo = novo;
+    }
+    c.saldo_original = r2(saldo);
+    c.total_utilizado = r2(c.total_utilizado);
+    c.total_compensado = r2(c.total_compensado);
+    const {v, faltam} = selicAcumulada(c.selic_inicio, dataPos, tab);
+    faltam.forEach(f => faltasTot.add(f));
+    c.selic_hoje = v;
+    c.saldo_atualizado = v == null ? null : r2(c.saldo_original * (1 + v / 100));
+    if (faltam.length) c.avisos.push(`Taxa Selic não cadastrada para ${faltam.map(mesAno).join(", ")}. Atualize a tabela Selic.`);
+  }
+
+  // Primeiro mês: 1%. Demais: taxa do mês anterior sobre o saldo original no início do mês.
+  function apropriar(c, ate, tab) {
+    if (!c.selic_inicio) return [];
+    const out = [];
+    for (let k = idx(c.selic_inicio); k <= idx(ate.slice(0, 7)); k++) {
+      const inicioMes = ym(k) + "-01";
+      const saldo = r2(c.valor_original - c.movimentos.filter(m => m.data < inicioMes).reduce((s, m) => s + m.utilizado, 0));
+      if (saldo <= 0.005) break;
+      const taxa = k === idx(c.selic_inicio) ? 1 : (tab[ym(k - 1)] ?? null);
+      out.push({competencia: mesAno(ym(k)), saldo, taxa, selic: taxa == null ? null : r2(saldo * taxa / 100)});
+    }
+    return out;
+  }
+  return {montar, apropriar, selicAcumulada, inicioPadrao};
+})();
+
+// =====================================================================
+// DADOS (Supabase)
+// =====================================================================
+let sb = null;
+const S = {user: null, docs: [], params: {}, ajustes: [], selic: {}, selicLinhas: [], cnpj: "", view: "painel",
+           creditoSel: null, abaCredito: "cc", dataPos: hojeISO(), importacao: [], aviso: null};
+
+function cfg() {
+  return {url: SUPABASE_URL || localStorage.getItem("pd_url") || "", key: SUPABASE_ANON_KEY || localStorage.getItem("pd_key") || ""};
+}
+
+async function todos(tabela, ordem) {
+  const out = []; const lote = 1000;
+  for (let i = 0; ; i += lote) {
+    let q = sb.from(tabela).select("*").range(i, i + lote - 1);
+    if (ordem) q = q.order(ordem);
+    const {data, error} = await q;
+    if (error) throw error;
+    out.push(...data);
+    if (data.length < lote) return out;
+  }
+}
+
+async function carregarDados() {
+  const [docs, params, ajustes, selic] = await Promise.all([
+    todos("documentos", "id"), todos("creditos"), todos("ajustes", "data"), todos("selic", "competencia")]);
+  S.docs = docs;
+  S.params = Object.fromEntries(params.map(p => [p.numero, p]));
+  S.ajustes = ajustes;
+  S.selicLinhas = selic.reverse();
+  S.selic = Object.fromEntries(selic.map(s => [s.competencia, Number(s.taxa)]));
+}
+
+async function atualizarSelicSeNecessario() {
+  const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1);
+  const ant = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  if (S.selic[ant] != null) return;
+  const {error} = await sb.rpc("atualizar_selic", {ano_inicial: S.selicLinhas.length ? d.getFullYear() - 1 : 2000});
+  if (error) S.aviso = `Não foi possível atualizar a Selic pelo Banco Central (${error.message}). Use a página Tabela Selic.`;
+  else await carregarDados();
+}
+
+async function debitosDe(ids) {
+  if (!ids.length) return [];
+  const out = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const {data, error} = await sb.from("debitos").select("*").in("documento_id", ids.slice(i, i + 200)).order("seq");
+    if (error) throw error;
+    out.push(...data);
+  }
+  return out;
+}
+
+const docsFiltrados = () => S.cnpj ? S.docs.filter(d => d.cnpj === S.cnpj) : S.docs;
+const creditos = () => Calc.montar(docsFiltrados(), S.params, S.ajustes, S.selic, S.dataPos);
+
+// =====================================================================
+// TELAS
+// =====================================================================
+function render() {
+  const c = cfg();
+  if (!c.url || !c.key) return telaConfig();
+  if (!S.user) return telaLogin();
+  const emps = {};
+  S.docs.forEach(d => emps[d.cnpj] = d.nome_empresa);
+  const views = [["painel","Painel de créditos"],["credito","Extrato do crédito"],["importar","Importar PER/DCOMP"],
+                 ["documentos","Documentos"],["selic","Tabela Selic"]];
+  $("#app").innerHTML = `
+    <header>
+      <img src="${LOGO}" alt="Irko">
+      <div class="titulo">Controle de PER/DCOMP</div>
+      <div class="esp"></div>
+      <label>Empresa
+        <select id="selEmpresa">
+          <option value="">Todas as empresas</option>
+          ${Object.entries(emps).sort((a, b) => (a[1] || "").localeCompare(b[1] || ""))
+            .map(([k, v]) => `<option value="${esc(k)}" ${k === S.cnpj ? "selected" : ""}>${esc(v)} (${esc(k)})</option>`).join("")}
+        </select>
+      </label>
+      <span class="usuario">${esc(S.user.email)}</span>
+      <button class="link" id="btnSair">Sair</button>
+    </header>
+    <nav>${views.map(([k, t]) => `<a href="#${k}" class="${S.view === k ? "ativo" : ""}">${t}</a>`).join("")}</nav>
+    <main id="conteudo"></main>`;
+  $("#selEmpresa").onchange = e => { S.cnpj = e.target.value; S.creditoSel = null; render(); };
+  $("#btnSair").onclick = async () => { await sb.auth.signOut(); S.user = null; render(); };
+  const main = $("#conteudo");
+  if (S.aviso) main.insertAdjacentHTML("beforeend", `<div class="msg aviso">${esc(S.aviso)}</div>`);
+  ({painel: telaPainel, credito: telaCredito, importar: telaImportar, documentos: telaDocumentos, selic: telaSelic}[S.view] || telaPainel)(main);
+}
+
+function telaConfig() {
+  $("#app").innerHTML = `
+    <div class="login">
+      <img src="${LOGO}" alt="Irko">
+      <h1>Configuração inicial</h1>
+      <p class="sub">Informe os dados do projeto Supabase (Project Settings &gt; API). Ficam salvos neste navegador.</p>
+      <label>Project URL<input id="cfgUrl" placeholder="https://xxxx.supabase.co"></label>
+      <label>Chave anon public<input id="cfgKey"></label>
+      <button class="prim" id="cfgSalvar">Salvar</button>
+    </div>`;
+  $("#cfgSalvar").onclick = () => {
+    const u = $("#cfgUrl").value.trim(), k = $("#cfgKey").value.trim();
+    if (!/^https:\/\/.+/.test(u) || !k) return alert("Informe a URL (https://...) e a chave.");
+    localStorage.setItem("pd_url", u); localStorage.setItem("pd_key", k);
+    iniciar();
+  };
+}
+
+function telaLogin(erro) {
+  $("#app").innerHTML = `
+    <form class="login" id="frmLogin">
+      <img src="${LOGO}" alt="Irko">
+      <h1>Controle de PER/DCOMP</h1>
+      ${erro ? `<div class="msg erro">${esc(erro)}</div>` : ""}
+      <label>E-mail<input type="email" id="lgEmail" autocomplete="username" required></label>
+      <label>Senha<input type="password" id="lgSenha" autocomplete="current-password" required></label>
+      <button class="prim" type="submit">Entrar</button>
+      <p class="nota">Acesso restrito a usuários Irko cadastrados pelo administrador.</p>
+      ${SUPABASE_URL ? "" : `<button type="button" class="link" id="lgCfg">Alterar configuração do Supabase</button>`}
+    </form>`;
+  $("#frmLogin").onsubmit = async e => {
+    e.preventDefault();
+    carregando(true);
+    const {data, error} = await sb.auth.signInWithPassword({email: $("#lgEmail").value.trim(), password: $("#lgSenha").value});
+    carregando(false);
+    if (error) return telaLogin(error.message === "Invalid login credentials" ? "E-mail ou senha inválidos." : error.message);
+    await entrar(data.user);
+  };
+  const b = $("#lgCfg");
+  if (b) b.onclick = () => { localStorage.removeItem("pd_url"); localStorage.removeItem("pd_key"); render(); };
+}
+
+function cards(itens) {
+  return `<div class="cards">${itens.map(([r, v, d]) => `<div class="card ${d ? "destaque" : ""}"><div class="rot">${esc(r)}</div><div class="val">${v}</div></div>`).join("")}</div>`;
+}
+
+function tabela(cols, linhas, rodape) {
+  return `<div class="tabela-wrap"><table>
+    <thead><tr>${cols.map(c => `<th class="${c.n ? "n" : ""}">${esc(c.t)}</th>`).join("")}</tr></thead>
+    <tbody>${linhas.join("")}</tbody>${rodape ? `<tfoot>${rodape}</tfoot>` : ""}</table></div>`;
+}
+
+// ---------------- Painel ----------------
+function telaPainel(main) {
+  const so = S.soSaldo || false;
+  let lista = creditos();
+  if (so) lista = lista.filter(c => c.saldo_original > 0.005);
+  const soma = f => lista.reduce((s, c) => s + (c[f] || 0), 0);
+  const nAlertas = c => c.avisos.length + c.movimentos.reduce((s, m) => s + m.divergencias.length, 0);
+  main.insertAdjacentHTML("beforeend", `
+    <h1>Painel de créditos</h1>
+    <p class="sub">Saldos dos créditos e atualização pela Selic na data de posição.</p>
+    <div class="barra">
+      <label>Posição em<input type="date" id="dataPos" value="${S.dataPos}"></label>
+      <label class="inline"><input type="checkbox" id="soSaldo" ${so ? "checked" : ""}> Somente créditos com saldo</label>
+      <div style="flex:1"></div>
+      <button id="btnExcel" ${lista.length ? "" : "disabled"}>Exportar para Excel</button>
+    </div>
+    ${lista.length ? cards([
+      ["Valor original dos créditos", brl(soma("valor_original"))],
+      ["Crédito original utilizado", brl(soma("total_utilizado"))],
+      ["Saldo original", brl(soma("saldo_original"))],
+      [`Saldo atualizado em ${dt(S.dataPos)}`, brl(soma("saldo_atualizado")), true],
+    ]) + tabela(
+      [{t:"Empresa"},{t:"Tipo de crédito"},{t:"Período"},{t:"PER/DCOMP de origem"},{t:"Início Selic"},{t:"Valor original",n:1},
+       {t:"Utilizado",n:1},{t:"Saldo original",n:1},{t:"Selic acum.",n:1},{t:"Saldo atualizado",n:1},{t:"DCOMPs",n:1},{t:"Conferência"}],
+      lista.map(c => `<tr class="clic" data-num="${esc(c.numero)}">
+        <td>${esc(c.nome_empresa)}</td><td>${esc(c.tipo_credito)}</td><td>${esc(c.periodo)}</td><td>${esc(c.numero)}</td>
+        <td>${mesAno(c.selic_inicio)}</td><td class="n">${n2(c.valor_original)}</td><td class="n">${n2(c.total_utilizado)}</td>
+        <td class="n">${n2(c.saldo_original)}</td><td class="n">${pct(c.selic_hoje)}</td><td class="n">${n2(c.saldo_atualizado)}</td>
+        <td class="n">${c.movimentos.filter(m => m.tipo === "DCOMP").length}</td>
+        <td>${nAlertas(c) ? `<span class="tag alerta">${nAlertas(c)} alerta(s)</span>` : `<span class="tag ok">OK</span>`}</td></tr>`),
+      `<tr><td colspan="5">Total</td><td class="n">${n2(soma("valor_original"))}</td><td class="n">${n2(soma("total_utilizado"))}</td>
+        <td class="n">${n2(soma("saldo_original"))}</td><td></td><td class="n">${n2(soma("saldo_atualizado"))}</td><td colspan="2"></td></tr>`)
+      + `<p class="nota">Clique em um crédito para abrir o extrato.</p>`
+    : `<div class="msg info">Nenhum crédito cadastrado. Importe os PDFs em <a href="#importar">Importar PER/DCOMP</a>.</div>`}`);
+  $("#dataPos").onchange = e => { S.dataPos = e.target.value || hojeISO(); render(); };
+  $("#soSaldo").onchange = e => { S.soSaldo = e.target.checked; render(); };
+  $("#btnExcel").onclick = () => exportarExcel(lista);
+  main.querySelectorAll("tr.clic").forEach(tr => tr.onclick = () => { S.creditoSel = tr.dataset.num; location.hash = "credito"; });
+}
+
+// ---------------- Extrato do crédito ----------------
+async function telaCredito(main) {
+  const lista = creditos();
+  if (!lista.length) {
+    main.insertAdjacentHTML("beforeend", `<h1>Extrato do crédito</h1><div class="msg info">Nenhum crédito cadastrado.</div>`);
+    return;
+  }
+  if (!lista.find(c => c.numero === S.creditoSel)) S.creditoSel = lista[0].numero;
+  const c = lista.find(x => x.numero === S.creditoSel);
+  const aba = S.abaCredito;
+  main.insertAdjacentHTML("beforeend", `
+    <h1>Extrato do crédito</h1>
+    <div class="barra">
+      <label style="flex:1;min-width:280px">Crédito
+        <select id="selCredito">${lista.map(x => `<option value="${esc(x.numero)}" ${x.numero === c.numero ? "selected" : ""}>
+          ${esc(x.nome_empresa)} | ${esc(x.tipo_credito)} | ${esc(x.periodo || "sem período")} | ${esc(x.numero)}</option>`).join("")}</select>
+      </label>
+      <label>Posição em<input type="date" id="dataPos" value="${S.dataPos}"></label>
+      <button id="btnExcel">Exportar para Excel</button>
+    </div>
+    ${c.avisos.map(a => `<div class="msg aviso">${esc(a)}</div>`).join("")}
+    ${cards([["Valor original", brl(c.valor_original)], ["Crédito original utilizado", brl(c.total_utilizado)],
+             ["Saldo original", brl(c.saldo_original)], [`Selic acumulada em ${dt(S.dataPos)}`, pct(c.selic_hoje)],
+             ["Saldo atualizado", brl(c.saldo_atualizado), true]])}
+    <p class="sub">${esc(c.nome_empresa)} | CNPJ ${esc(c.cnpj)} | ${esc(c.tipo_credito)} | Período ${esc(c.periodo || "-")} |
+      Origem: ${esc(c.tipo_documento)} ${esc(c.numero)}${c.data_transmissao ? ` transmitido em ${dt(c.data_transmissao)}` : ""} |
+      Início da Selic: ${mesAno(c.selic_inicio)}</p>
+    <div class="abas">
+      ${[["cc","Conta-corrente"],["deb","Débitos compensados"],["apr","Selic a apropriar"],["par","Parâmetros e ajustes"]]
+        .map(([k, t]) => `<button data-aba="${k}" class="${aba === k ? "ativo" : ""}">${t}</button>`).join("")}
+    </div>
+    <div id="abaConteudo"></div>`);
+  $("#selCredito").onchange = e => { S.creditoSel = e.target.value; render(); };
+  $("#dataPos").onchange = e => { S.dataPos = e.target.value || hojeISO(); render(); };
+  $("#btnExcel").onclick = () => exportarExcel([c]);
+  main.querySelectorAll(".abas button").forEach(b => b.onclick = () => { S.abaCredito = b.dataset.aba; render(); });
+  const box = $("#abaConteudo");
+
+  if (aba === "cc") {
+    box.innerHTML = c.movimentos.length ? tabela(
+      [{t:"Data"},{t:"Tipo"},{t:"PER/DCOMP"},{t:"Status"},{t:"Saldo original antes",n:1},{t:"Selic acum.",n:1},{t:"Selic PDF",n:1},
+       {t:"Total dos débitos",n:1},{t:"Crédito original utilizado",n:1},{t:"Selic utilizada",n:1},{t:"Saldo original após",n:1},{t:"Conferência"}],
+      c.movimentos.map(m => `<tr><td>${dt(m.data)}</td><td>${m.tipo}</td><td>${esc(m.numero)}</td><td>${esc(m.status)}</td>
+        <td class="n">${n2(m.saldo_antes)}</td><td class="n">${pct(m.selic)}</td><td class="n">${pct(m.selic_pdf)}</td>
+        <td class="n">${n2(m.total_debitos)}</td><td class="n">${n2(m.utilizado)}</td><td class="n">${n2(m.juros)}</td>
+        <td class="n">${n2(m.saldo_depois)}</td>
+        <td>${m.divergencias.length ? m.divergencias.map(d => `<span class="tag alerta">${esc(d)}</span>`).join("<br>") : `<span class="tag ok">OK</span>`}</td></tr>`),
+      `<tr><td colspan="7">Total</td><td class="n">${n2(c.total_compensado)}</td><td class="n">${n2(c.total_utilizado)}</td>
+        <td class="n">${n2(c.movimentos.reduce((s, m) => s + m.juros, 0))}</td><td class="n">${n2(c.saldo_original)}</td><td></td></tr>`)
+      + `<p class="nota">Selic acumulada = soma das taxas mensais do mês de início até o mês anterior ao da transmissão + 1% no mês da transmissão.
+         Crédito utilizado = débitos / (1 + Selic). Quando o PDF informa o crédito utilizado, prevalece o valor declarado; o cálculo serve de conferência.</p>`
+      : `<div class="msg info">Nenhuma DCOMP vinculada a este crédito até o momento.</div>`;
+  }
+  if (aba === "deb") {
+    box.innerHTML = "Carregando...";
+    const ids = c.movimentos.filter(m => m.documento_id).map(m => m.documento_id);
+    const docPorId = Object.fromEntries(S.docs.map(d => [d.id, d]));
+    const debs = (await debitosDe(ids)).sort((a, b) =>
+      (docPorId[a.documento_id].data_transmissao || "").localeCompare(docPorId[b.documento_id].data_transmissao || "") || a.documento_id - b.documento_id || a.seq - b.seq);
+    const porCod = {};
+    debs.forEach(d => { const k = d.codigo_receita + " " + d.denominacao; porCod[k] = (porCod[k] || 0) + num(d.total); });
+    box.innerHTML = debs.length ? tabela(
+      [{t:"Data DCOMP"},{t:"PER/DCOMP"},{t:"Grupo"},{t:"Código"},{t:"Denominação"},{t:"PA"},{t:"Vencimento"},
+       {t:"Principal",n:1},{t:"Multa",n:1},{t:"Juros",n:1},{t:"Total",n:1}],
+      debs.map(d => { const doc = docPorId[d.documento_id]; return `<tr><td>${dt(doc.data_transmissao)}</td><td>${esc(doc.numero)}</td>
+        <td>${esc(d.grupo)}</td><td>${esc(d.codigo_receita)}</td><td>${esc(d.denominacao)}</td><td>${esc(d.periodo_apuracao)}</td>
+        <td>${dt(d.vencimento)}</td><td class="n">${n2(d.principal)}</td><td class="n">${n2(d.multa)}</td>
+        <td class="n">${n2(d.juros)}</td><td class="n">${n2(d.total)}</td></tr>`; }),
+      `<tr><td colspan="10">Total</td><td class="n">${n2(debs.reduce((s, d) => s + num(d.total), 0))}</td></tr>`)
+      + `<h2>Total por código de receita</h2>` + tabela([{t:"Código / denominação"},{t:"Total",n:1}],
+        Object.entries(porCod).sort().map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${n2(v)}</td></tr>`))
+      : `<div class="msg info">Nenhum débito compensado.</div>`;
+  }
+  if (aba === "apr") {
+    const apr = Calc.apropriar(c, S.dataPos, S.selic);
+    box.innerHTML = apr.length ? tabela([{t:"Competência"},{t:"Saldo original no início do mês",n:1},{t:"Taxa",n:1},{t:"Selic do mês",n:1}],
+      apr.map(a => `<tr><td>${a.competencia}</td><td class="n">${n2(a.saldo)}</td><td class="n">${pct(a.taxa)}</td><td class="n">${n2(a.selic)}</td></tr>`),
+      `<tr><td colspan="3">Total</td><td class="n">${n2(apr.reduce((s, a) => s + (a.selic || 0), 0))}</td></tr>`)
+      + `<p class="nota">Primeiro mês: 1%. Demais meses: taxa Selic do mês anterior aplicada sobre o saldo original existente no início do mês.
+         Critério de apropriação contábil sujeito à validação do responsável técnico.</p>`
+      : `<div class="msg info">Defina o mês de início da Selic na aba Parâmetros e ajustes.</div>`;
+  }
+  if (aba === "par") {
+    const p = S.params[c.numero] || {};
+    const ajs = S.ajustes.filter(a => a.numero_credito === c.numero);
+    box.innerHTML = `
+      <div class="caixa">
+        <h2 style="margin-top:0">Parâmetros do crédito</h2>
+        <p class="nota">Início da Selic pelo tipo de crédito: <b>${c.selic_inicio_padrao ? mesAno(c.selic_inicio_padrao) : "não definido para este tipo"}</b>.
+          Saldo negativo: mês seguinte ao encerramento do período. Pagamento indevido: mês seguinte ao pagamento.
+          Ressarcimentos e demais casos dependem de análise do responsável técnico.</p>
+        <div class="grid2">
+          <label>Mês de início da Selic<input type="month" id="pIni" value="${esc(p.selic_inicio || c.selic_inicio_padrao || "")}"></label>
+          <label>Valor original do crédito (vazio = valor do PDF)<input type="number" step="0.01" id="pValor" value="${p.valor_credito ?? ""}"></label>
+        </div>
+        <label style="margin-top:10px">Observação<textarea id="pObs">${esc(p.observacao || "")}</textarea></label>
+        <div style="margin-top:10px"><button class="prim" id="pSalvar">Salvar parâmetros</button></div>
+      </div>
+      <div class="caixa">
+        <h2 style="margin-top:0">Ajustes manuais</h2>
+        <p class="nota">Restituição recebida, glosa, despacho decisório ou outro evento que altere o saldo original. Valor positivo reduz o saldo; negativo aumenta.</p>
+        ${ajs.length ? tabela([{t:"Data"},{t:"Valor original",n:1},{t:"Descrição"},{t:"Lançado por"},{t:""}],
+          ajs.map(a => `<tr><td>${dt(a.data)}</td><td class="n">${n2(a.valor_original)}</td><td>${esc(a.descricao)}</td>
+            <td>${esc(a.criado_por)}</td><td><button class="link" data-del="${a.id}">Excluir</button></td></tr>`)) : ""}
+        <div class="barra" style="margin-top:12px">
+          <label>Data<input type="date" id="aData" value="${hojeISO()}"></label>
+          <label>Valor original<input type="number" step="0.01" id="aValor"></label>
+          <label style="flex:1">Descrição<input id="aDesc"></label>
+          <button id="aIncluir">Incluir ajuste</button>
+        </div>
+      </div>`;
+    $("#pSalvar").onclick = () => acao(async () => {
+      const ini = $("#pIni").value || null, v = $("#pValor").value;
+      const {error} = await sb.from("creditos").upsert({numero: c.numero, selic_inicio: ini === c.selic_inicio_padrao ? null : ini,
+        valor_credito: v === "" ? null : Number(v), observacao: $("#pObs").value || null, atualizado_em: new Date().toISOString()});
+      if (error) throw error;
+    }, "Parâmetros salvos.");
+    $("#aIncluir").onclick = () => {
+      const v = Number($("#aValor").value);
+      if (!v || !$("#aData").value) return alert("Informe a data e um valor diferente de zero.");
+      acao(async () => {
+        const {error} = await sb.from("ajustes").insert({numero_credito: c.numero, data: $("#aData").value, valor_original: v, descricao: $("#aDesc").value || null});
+        if (error) throw error;
+      }, "Ajuste incluído.");
+    };
+    box.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+      if (!confirm("Excluir este ajuste?")) return;
+      acao(async () => { const {error} = await sb.from("ajustes").delete().eq("id", b.dataset.del); if (error) throw error; }, "Ajuste excluído.");
+    });
+  }
+}
+
+// ---------------- Importar ----------------
+function telaImportar(main) {
+  main.insertAdjacentHTML("beforeend", `
+    <h1>Importar PER/DCOMP</h1>
+    <p class="sub">Importe os PDFs do PER/DCOMP (recibo/extrato completo). O pedido ou a primeira DCOMP cria o crédito;
+      as DCOMPs seguintes são vinculadas pelo campo "Nº do PER/DCOMP Inicial" e abatem o saldo. A ordem de importação não importa.</p>
+    <div class="drop" id="drop">Arraste os PDFs aqui ou clique para selecionar<input type="file" id="arqs" accept="application/pdf" multiple class="oculto"></div>
+    <div id="previa"></div>`);
+  const drop = $("#drop"), inp = $("#arqs");
+  drop.onclick = () => inp.click();
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add("sobre"); };
+  drop.ondragleave = () => drop.classList.remove("sobre");
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove("sobre"); lerArquivos([...e.dataTransfer.files]); };
+  inp.onchange = () => lerArquivos([...inp.files]);
+  mostrarPrevia();
+}
+
+async function lerArquivos(files) {
+  files = files.filter(f => /\.pdf$/i.test(f.name));
+  if (!files.length) return;
+  carregando(true);
+  S.importacao = [];
+  for (const f of files) {
+    const buf = await f.arrayBuffer();
+    try { S.importacao.push({nome: f.name, buf, doc: await PD.lerPdf(buf.slice(0))}); }
+    catch (e) { S.importacao.push({nome: f.name, erro: e.message}); }
+  }
+  carregando(false);
+  mostrarPrevia();
+}
+
+function mostrarPrevia() {
+  const box = $("#previa");
+  if (!box || !S.importacao.length) return;
+  const existe = new Set(S.docs.map(d => d.numero));
+  const validos = S.importacao.filter(x => x.doc);
+  const cnpjs = new Set(validos.map(x => x.doc.cnpj));
+  box.innerHTML = `<h2>Prévia</h2>` + tabela(
+    [{t:"Arquivo"},{t:"Situação"},{t:"Número"},{t:"Empresa"},{t:"Documento"},{t:"Tipo de crédito"},{t:"Transmissão"},
+     {t:"PER/DCOMP inicial"},{t:"Selic",n:1},{t:"Crédito na entrega",n:1},{t:"Débitos",n:1},{t:"Utilizado",n:1},{t:"Observações"}],
+    S.importacao.map(x => x.erro ? `<tr><td>${esc(x.nome)}</td><td><span class="tag erro">Erro</span></td><td colspan="11">${esc(x.erro)}</td></tr>` :
+      `<tr><td>${esc(x.nome)}</td><td>${existe.has(x.doc.numero) ? `<span class="tag alerta">Já importado</span>` : `<span class="tag ok">Novo</span>`}</td>
+       <td>${esc(x.doc.numero)}</td><td>${esc(x.doc.nome_empresa)}</td><td>${esc(x.doc.tipo_documento)}</td><td>${esc(x.doc.tipo_credito)}</td>
+       <td>${dt(x.doc.data_transmissao)}</td><td>${esc(x.doc.numero_inicial || "")}</td><td class="n">${pct(x.doc.selic_pdf)}</td>
+       <td class="n">${n2(x.doc.credito_original_entrega)}</td><td class="n">${n2(x.doc.total_debitos)}</td><td class="n">${n2(x.doc.credito_utilizado)}</td>
+       <td>${x.doc.avisos.map(esc).join("<br>")}</td></tr>`))
+    + (cnpjs.size > 1 ? `<div class="msg aviso" style="margin-top:12px">Os arquivos pertencem a ${cnpjs.size} CNPJs diferentes. Confira se a importação conjunta é intencional.</div>` : "")
+    + `<div class="barra" style="margin-top:14px">
+        <label class="inline"><input type="checkbox" id="substituir"> Reimportar os já importados (status e observações são mantidos)</label>
+        <button class="prim" id="btnImportar">Importar</button></div><div id="resultado"></div>`;
+  $("#btnImportar").onclick = async () => {
+    const subst = $("#substituir").checked;
+    const alvo = validos.filter(x => subst || !existe.has(x.doc.numero));
+    if (!alvo.length) return alert("Nenhum documento novo para importar.");
+    carregando(true);
+    let ok = 0; const erros = [];
+    for (const x of alvo) {
+      try {
+        const {debitos, avisos, ...doc} = x.doc;
+        const caminho = `${doc.cnpj.replace(/\D/g, "")}/${doc.numero}.pdf`;
+        const up = await sb.storage.from(BUCKET).upload(caminho, new Blob([x.buf], {type: "application/pdf"}), {upsert: true, contentType: "application/pdf"});
+        if (up.error) throw up.error;
+        doc.arquivo = caminho;
+        const {error} = await sb.rpc("importar_documento", {p_doc: doc, p_debitos: debitos, p_substituir: subst});
+        if (error) throw error;
+        ok++;
+      } catch (e) { erros.push(`${x.nome}: ${e.message}`); }
+    }
+    await carregarDados();
+    carregando(false);
+    S.importacao = [];
+    render();
+    $("#previa").innerHTML = `<div class="msg ok">${ok} documento(s) importado(s).</div>` + erros.map(e => `<div class="msg erro">${esc(e)}</div>`).join("");
+  };
+}
+
+// ---------------- Documentos ----------------
+function telaDocumentos(main) {
+  const docs = docsFiltrados().slice().sort((a, b) => (a.data_transmissao || "").localeCompare(b.data_transmissao || "") || a.numero.localeCompare(b.numero));
+  main.insertAdjacentHTML("beforeend", `
+    <h1>Documentos importados</h1>
+    <p class="sub">Altere status e observação e clique em Salvar na linha. Documentos com status Retificado ou Cancelado deixam de abater o saldo.</p>
+    <div class="barra"><label style="flex:1">Filtrar<input id="filtro" placeholder="Número, empresa, tipo..." value="${esc(S.filtroDocs || "")}"></label></div>
+    ${docs.length ? tabela([{t:"Número"},{t:"Empresa"},{t:"Documento"},{t:"Tipo de crédito"},{t:"Transmissão"},{t:"PER/DCOMP inicial"},
+      {t:"Débitos",n:1},{t:"Utilizado",n:1},{t:"Status"},{t:"Observação"},{t:"Importado por"},{t:""}],
+      docs.map(d => `<tr data-busca="${esc((d.numero + " " + d.nome_empresa + " " + d.tipo_documento + " " + d.tipo_credito + " " + (d.numero_inicial || "")).toLowerCase())}">
+        <td>${esc(d.numero)}</td><td>${esc(d.nome_empresa)}</td><td>${esc(d.tipo_documento)}</td><td>${esc(d.tipo_credito)}</td>
+        <td>${dt(d.data_transmissao)}</td><td>${esc(d.numero_inicial || "")}</td><td class="n">${n2(d.total_debitos)}</td>
+        <td class="n">${n2(d.credito_utilizado)}</td>
+        <td><select data-st="${d.id}">${STATUS_DOC.map(s => `<option ${s === d.status ? "selected" : ""}>${s}</option>`).join("")}</select></td>
+        <td><input data-obs="${d.id}" value="${esc(d.observacao || "")}" style="min-width:180px"></td>
+        <td>${esc(d.importado_por || "")}</td>
+        <td style="white-space:nowrap"><button class="link" data-salvar="${d.id}">Salvar</button>
+          <button class="link" data-pdf="${esc(d.arquivo || "")}" ${d.arquivo ? "" : "disabled"}>PDF</button>
+          <button class="link" data-excluir="${d.id}" style="color:var(--erro)">Excluir</button></td></tr>`))
+      : `<div class="msg info">Nenhum documento importado.</div>`}`);
+  const filtrar = () => { const q = ($("#filtro").value || "").toLowerCase(); S.filtroDocs = q;
+    main.querySelectorAll("tr[data-busca]").forEach(tr => tr.classList.toggle("oculto", !tr.dataset.busca.includes(q))); };
+  $("#filtro").oninput = filtrar; filtrar();
+  main.querySelectorAll("[data-salvar]").forEach(b => b.onclick = () => acao(async () => {
+    const id = b.dataset.salvar;
+    const {error} = await sb.from("documentos").update({status: main.querySelector(`[data-st="${id}"]`).value,
+      observacao: main.querySelector(`[data-obs="${id}"]`).value || null}).eq("id", id);
+    if (error) throw error;
+  }, "Documento atualizado."));
+  main.querySelectorAll("[data-pdf]").forEach(b => b.onclick = async () => {
+    const {data, error} = await sb.storage.from(BUCKET).createSignedUrl(b.dataset.pdf, 120);
+    if (error) return alert(error.message);
+    window.open(data.signedUrl, "_blank");
+  });
+  main.querySelectorAll("[data-excluir]").forEach(b => b.onclick = () => {
+    const d = S.docs.find(x => String(x.id) === b.dataset.excluir);
+    if (!confirm(`Excluir ${d.numero}? Os débitos vinculados e o PDF também serão excluídos.`)) return;
+    acao(async () => {
+      const {error} = await sb.from("documentos").delete().eq("id", d.id);
+      if (error) throw error;
+      if (d.arquivo) await sb.storage.from(BUCKET).remove([d.arquivo]);
+    }, "Documento excluído.");
+  });
+}
+
+// ---------------- Tabela Selic ----------------
+function telaSelic(main) {
+  main.insertAdjacentHTML("beforeend", `
+    <h1>Tabela Selic</h1>
+    <p class="sub">Taxa Selic mensal (% ao mês), série 4390 do Banco Central, a mesma usada pela Receita Federal no PER/DCOMP.
+      O mês corrente não é gravado porque o BCB publica valor parcial. Taxas lançadas manualmente não são sobrescritas.</p>
+    <div class="barra">
+      <button class="prim" id="btnBcb">Atualizar pelo Banco Central</button>
+      <div style="flex:1"></div>
+      <label>Competência<input type="month" id="mComp"></label>
+      <label>Taxa do mês (%)<input type="number" step="0.01" min="0" max="10" id="mTaxa"></label>
+      <button id="btnManual">Gravar manualmente</button>
+    </div>
+    ${S.selicLinhas.length ? tabela([{t:"Competência"},{t:"Taxa",n:1},{t:"Fonte"},{t:"Atualizado em"}],
+      S.selicLinhas.map(s => `<tr><td>${mesAno(s.competencia)}</td><td class="n">${pct(s.taxa)}</td><td>${esc(s.fonte)}</td>
+        <td>${new Date(s.atualizado_em).toLocaleString("pt-BR")}</td></tr>`))
+      : `<div class="msg info">Tabela vazia. Clique em Atualizar pelo Banco Central.</div>`}`);
+  $("#btnBcb").onclick = () => acao(async () => {
+    const {error} = await sb.rpc("atualizar_selic", {ano_inicial: 2000});
+    if (error) throw error;
+    S.aviso = null;
+  }, "Tabela Selic atualizada.");
+  $("#btnManual").onclick = () => {
+    const comp = $("#mComp").value, t = $("#mTaxa").value;
+    if (!comp || t === "") return alert("Informe a competência e a taxa.");
+    acao(async () => {
+      const {error} = await sb.from("selic").upsert({competencia: comp, taxa: Number(t), fonte: "Manual", atualizado_em: new Date().toISOString()});
+      if (error) throw error;
+    }, "Taxa gravada.");
+  };
+}
+
+// ---------------- Ações e exportação ----------------
+async function acao(fn, msgOk) {
+  carregando(true);
+  try { await fn(); await carregarDados(); render(); toast(msgOk); }
+  catch (e) { alert("Erro: " + (e.message || e)); }
+  finally { carregando(false); }
+}
+
+function toast(msg) {
+  if (!msg) return;
+  const d = document.createElement("div");
+  d.className = "msg ok";
+  d.style.cssText = "position:fixed;right:20px;bottom:20px;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15)";
+  d.textContent = msg;
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 3000);
+}
+
+async function exportarExcel(lista) {
+  carregando(true);
+  try {
+    const wb = new ExcelJS.Workbook();
+    const MOEDA = '#,##0.00;[Red]-#,##0.00', PCT = '0.00"%"', DATA = "dd/mm/yyyy";
+    const toDate = iso => iso ? new Date(iso.slice(0, 10) + "T12:00:00") : null;
+    const cab = (ws, r, tit) => { const row = ws.getRow(r); tit.forEach((t, i) => { const c = row.getCell(i + 1); c.value = t;
+      c.font = {bold: true, color: {argb: "FFFFFFFF"}}; c.fill = {type: "pattern", pattern: "solid", fgColor: {argb: "FF61729F"}};
+      c.alignment = {wrapText: true, vertical: "middle", horizontal: "center"}; }); row.height = 30; };
+    const lin = (ws, r, vals, fmts) => { const row = ws.getRow(r); vals.forEach((v, i) => { const c = row.getCell(i + 1); c.value = v ?? null;
+      if (fmts[i]) c.numFmt = fmts[i]; c.border = {bottom: {style: "thin", color: {argb: "FFD9DCE3"}}}; }); };
+    const larg = (ws, ws_) => ws_.forEach((w, i) => ws.getColumn(i + 1).width = w);
+
+    const res = wb.addWorksheet("Resumo");
+    res.getCell("A1").value = "Controle de créditos PER/DCOMP"; res.getCell("A1").font = {bold: true, size: 14, color: {argb: "FF61729F"}};
+    res.getCell("A2").value = `Posição em ${dt(S.dataPos)}`;
+    cab(res, 4, ["Empresa","CNPJ","Tipo de crédito","Período","PER/DCOMP de origem","Status","Início Selic","Valor original",
+                 "Crédito original utilizado","Débitos compensados","Saldo original","Selic acumulada","Saldo atualizado","Avisos"]);
+    let r = 5;
+    for (const c of lista) lin(res, r++, [c.nome_empresa, c.cnpj, c.tipo_credito, c.periodo, c.numero, c.status, mesAno(c.selic_inicio),
+      c.valor_original, c.total_utilizado, c.total_compensado, c.saldo_original, c.selic_hoje, c.saldo_atualizado, c.avisos.join(" | ")],
+      [, , , , , , , MOEDA, MOEDA, MOEDA, MOEDA, PCT, MOEDA]);
+    res.getCell(`A${r}`).value = "Total"; res.getCell(`A${r}`).font = {bold: true};
+    for (const col of ["H","I","J","K","M"]) { const c = res.getCell(`${col}${r}`); c.value = {formula: `SUM(${col}5:${col}${r - 1})`}; c.numFmt = MOEDA; c.font = {bold: true}; }
+    larg(res, [32,20,26,24,34,14,11,16,16,16,16,10,16,60]);
+    res.views = [{state: "frozen", ySplit: 4}];
+
+    const usados = new Set(["Resumo"]);
+    const docPorId = Object.fromEntries(S.docs.map(d => [d.id, d]));
+    for (const c of lista) {
+      const ab = /saldo negativo/i.test(c.tipo_credito) ? "SN" + c.tipo_credito.split(" ").pop().toUpperCase()
+        : (c.tipo_credito.match(/\b\w{3,}/g) || ["CRED"]).map(p => p[0]).join("").toUpperCase().slice(0, 8);
+      let nome = `${ab} ${c.numero.slice(-9)}`.replace(/[\\\/*?:\[\]]/g, "-").slice(0, 31), i = 2;
+      const base = nome; while (usados.has(nome)) nome = `${base.slice(0, 28)}(${i++})`; usados.add(nome);
+      const ws = wb.addWorksheet(nome);
+      const info = [["Empresa", c.nome_empresa], ["CNPJ", c.cnpj], ["Tipo de crédito", c.tipo_credito], ["Período", c.periodo],
+        ["PER/DCOMP de origem", c.numero], ["Status", c.status], ["Início da Selic", mesAno(c.selic_inicio)],
+        ["Valor original do crédito", c.valor_original, MOEDA], ["Saldo original", c.saldo_original, MOEDA],
+        [`Selic acumulada em ${dt(S.dataPos)}`, c.selic_hoje, PCT], ["Saldo atualizado", c.saldo_atualizado, MOEDA], ["Observação", c.observacao]];
+      info.forEach(([k, v, f], i) => { ws.getCell(i + 1, 1).value = k; ws.getCell(i + 1, 1).font = {bold: true};
+        ws.getCell(i + 1, 2).value = v ?? null; if (f) ws.getCell(i + 1, 2).numFmt = f; });
+      r = info.length + 2;
+      ws.getCell(r, 1).value = "Conta-corrente do crédito"; ws.getCell(r, 1).font = {bold: true, size: 12}; r++;
+      cab(ws, r, ["Data","Tipo","PER/DCOMP","Status","Saldo original antes","Selic acumulada","Total dos débitos",
+                  "Crédito original utilizado","Selic utilizada","Saldo original após","Divergências"]);
+      for (const m of c.movimentos) lin(ws, ++r, [toDate(m.data), m.tipo, m.numero, m.status, m.saldo_antes, m.selic, m.total_debitos,
+        m.utilizado, m.juros, m.saldo_depois, m.divergencias.join(" | ")], [DATA, , , , MOEDA, PCT, MOEDA, MOEDA, MOEDA, MOEDA]);
+      const ids = c.movimentos.filter(m => m.documento_id).map(m => m.documento_id);
+      const debs = await debitosDe(ids);
+      if (debs.length) {
+        r += 3; ws.getCell(r, 1).value = "Débitos compensados"; ws.getCell(r, 1).font = {bold: true, size: 12}; r++;
+        cab(ws, r, ["Data DCOMP","PER/DCOMP","Grupo","Código","Denominação","Período de apuração","Vencimento","Principal","Multa","Juros","Total"]);
+        debs.sort((a, b) => (docPorId[a.documento_id].data_transmissao || "").localeCompare(docPorId[b.documento_id].data_transmissao || "") || a.documento_id - b.documento_id || a.seq - b.seq);
+        for (const d of debs) { const doc = docPorId[d.documento_id];
+          lin(ws, ++r, [toDate(doc.data_transmissao), doc.numero, d.grupo, d.codigo_receita, d.denominacao, d.periodo_apuracao,
+            toDate(d.vencimento), num(d.principal), num(d.multa), num(d.juros), num(d.total)], [DATA, , , , , , DATA, MOEDA, MOEDA, MOEDA, MOEDA]); }
+      }
+      const apr = Calc.apropriar(c, S.dataPos, S.selic);
+      if (apr.length) {
+        r += 3; ws.getCell(r, 1).value = "Selic a apropriar por competência"; ws.getCell(r, 1).font = {bold: true, size: 12}; r++;
+        cab(ws, r, ["Competência","Saldo original no início do mês","Taxa","Selic do mês"]);
+        const ini = r + 1;
+        for (const a of apr) lin(ws, ++r, [a.competencia, a.saldo, a.taxa, a.selic], [, MOEDA, PCT, MOEDA]);
+        r++; ws.getCell(r, 1).value = "Total"; ws.getCell(r, 1).font = {bold: true};
+        ws.getCell(r, 4).value = {formula: `SUM(D${ini}:D${r - 1})`}; ws.getCell(r, 4).numFmt = MOEDA; ws.getCell(r, 4).font = {bold: true};
+      }
+      larg(ws, [26,34,34,14,40,16,16,16,16,16,60]);
+    }
+    const buf = await wb.xlsx.writeBuffer();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([buf], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+    a.download = lista.length === 1 ? `Credito ${lista[0].numero} ${S.dataPos}.xlsx` : `Controle PERDCOMP ${S.dataPos}.xlsx`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (e) { alert("Erro ao gerar o Excel: " + e.message); }
+  finally { carregando(false); }
+}
+
+// =====================================================================
+// INICIALIZAÇÃO
+// =====================================================================
+async function entrar(user) {
+  if (!/@irko\.com\.br$/i.test(user.email || "")) {
+    await sb.auth.signOut();
+    return telaLogin("Acesso restrito a e-mails @irko.com.br.");
+  }
+  S.user = user;
+  carregando(true);
+  try { await carregarDados(); await atualizarSelicSeNecessario(); }
+  catch (e) { S.aviso = "Erro ao carregar dados: " + e.message; }
+  carregando(false);
+  render();
+}
+
+async function iniciar() {
+  const c = cfg();
+  if (!c.url || !c.key) return render();
+  sb = supabase.createClient(c.url, c.key);
+  const {data} = await sb.auth.getSession();
+  if (data.session) await entrar(data.session.user); else render();
+}
+
+window.addEventListener("hashchange", () => { S.view = location.hash.slice(1) || "painel"; if (S.user) render(); });
+S.view = location.hash.slice(1) || "painel";
+iniciar();
+</script>
+</body>
+</html>
